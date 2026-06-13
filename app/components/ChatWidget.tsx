@@ -3,12 +3,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   createRecognizer,
-  speak,
-  stopSpeaking,
+  speakReply,
+  stopAllSpeech,
   speechSupported,
   ttsSupported,
   type PersonaTTS,
-} from "@/lib/voice/webspeech";
+  type VoiceProvider,
+} from "@/lib/voice";
 import { detectLanguage, t, toBCP47 } from "@/lib/lang";
 
 type ServiceCard = { name: string; price: string | null; durationMin: number; description: string | null };
@@ -27,6 +28,7 @@ interface BizMeta {
   tagline?: string;
   branding: { primary: string; accent: string; bubbleEmoji?: string };
   persona: PersonaTTS & { displayName: string };
+  voiceProvider: VoiceProvider;
   services: ServiceCard[];
   suggestions: string[];
   emergencyLine?: string;
@@ -89,8 +91,10 @@ export default function ChatWidget() {
   const say = useCallback(
     (text: string) => {
       if (!voiceOnRef.current || !biz) return;
-      void speak(text, biz.persona, {
+      void speakReply(text, {
+        persona: biz.persona,
         lang: detectLanguage(text),
+        provider: biz.voiceProvider,
         onStart: () => setSpeaking(true),
         onEnd: () => setSpeaking(false),
       });
@@ -133,7 +137,7 @@ export default function ChatWidget() {
       setListening(false);
       return;
     }
-    stopSpeaking(); // barge-in
+    stopAllSpeech(); // barge-in
     const rec = createRecognizer({
       onResult: (text, isFinal) => {
         setInput(text);
@@ -153,7 +157,7 @@ export default function ChatWidget() {
   }, [listening, send]);
 
   const submitBooking = useCallback(
-    async (form: { clientName: string; phone: string; petName?: string; serviceName: string; startISO: string }) => {
+    async (form: { clientName: string; phone: string; email?: string; petName?: string; serviceName: string; startISO: string }) => {
       const res = await fetch("/api/bookings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -184,12 +188,12 @@ export default function ChatWidget() {
   );
 
   if (!biz) {
-    return <div className="text-sm text-neutral-400">Loading assistant…</div>;
+    return <div className="text-sm text-muted-foreground">Loading assistant…</div>;
   }
 
   return (
     <div
-      className="relative flex h-[640px] w-full max-w-[420px] flex-col overflow-hidden rounded-3xl border border-black/10 bg-white shadow-[0_20px_60px_-15px_rgba(0,0,0,0.25)]"
+      className="relative flex h-[640px] w-full max-w-[420px] flex-col overflow-hidden rounded-3xl border border-border bg-card shadow-[0_20px_60px_-15px_rgba(0,0,0,0.35)]"
       style={{ ["--brand" as string]: primary, ["--accent" as string]: accent }}
     >
       {/* Header */}
@@ -201,10 +205,10 @@ export default function ChatWidget() {
           <p className="truncate text-sm font-semibold">{biz.assistantName} · {biz.name}</p>
           <p className="truncate text-xs text-white/80">{speaking ? "speaking…" : listening ? "listening…" : "online · here to help"}</p>
         </div>
-        {ttsSupported() && (
+        {(ttsSupported() || biz.voiceProvider === "elevenlabs") && (
           <button
             onClick={() => {
-              if (voiceOn) stopSpeaking();
+              if (voiceOn) stopAllSpeech();
               setVoiceOn((v) => !v);
             }}
             aria-pressed={voiceOn}
@@ -218,7 +222,7 @@ export default function ChatWidget() {
       </header>
 
       {/* Messages */}
-      <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto bg-neutral-50 px-4 py-4">
+      <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto bg-muted px-4 py-4">
         {messages.map((m, i) => (
           <MessageRow key={i} msg={m} primary={primary} accent={accent} onSlot={(service, slot) => setBooking({ service, startISO: slot.iso, label: slot.label })} onService={(name) => void send(`I'd like to book a ${name}`)} />
         ))}
@@ -227,12 +231,12 @@ export default function ChatWidget() {
 
       {/* Suggestions (only before the user has spoken) */}
       {messages.length <= 1 && (
-        <div className="flex flex-wrap gap-2 border-t border-black/5 bg-white px-4 py-2">
+        <div className="flex flex-wrap gap-2 border-t border-border bg-card px-4 py-2">
           {biz.suggestions.map((s) => (
             <button
               key={s}
               onClick={() => void send(s)}
-              className="rounded-full border border-black/10 px-3 py-1.5 text-xs text-neutral-700 transition active:scale-95 hover:border-[var(--brand)] hover:text-[var(--brand)]"
+              className="rounded-full border border-border px-3 py-1.5 text-xs text-muted-foreground transition active:scale-95 hover:border-[var(--brand)] hover:text-[var(--brand)]"
             >
               {s}
             </button>
@@ -246,7 +250,7 @@ export default function ChatWidget() {
           e.preventDefault();
           void send(input);
         }}
-        className="flex items-center gap-2 border-t border-black/10 bg-white px-3 py-3"
+        className="flex items-center gap-2 border-t border-border bg-card px-3 py-3"
       >
         {speechSupported() && (
           <button
@@ -255,7 +259,7 @@ export default function ChatWidget() {
             aria-pressed={listening}
             aria-label={listening ? "Stop listening" : "Speak"}
             className={`grid h-11 w-11 shrink-0 place-items-center rounded-full text-lg transition active:scale-95 ${
-              listening ? "animate-pulse text-white" : "text-neutral-600 hover:bg-neutral-100"
+              listening ? "animate-pulse text-white" : "text-muted-foreground hover:bg-muted"
             }`}
             style={listening ? { background: primary } : undefined}
           >
@@ -267,7 +271,7 @@ export default function ChatWidget() {
           onChange={(e) => setInput(e.target.value)}
           placeholder={listening ? "Listening…" : "Type or tap the mic…"}
           aria-label="Message"
-          className="h-11 flex-1 rounded-full border border-black/10 bg-neutral-50 px-4 text-sm outline-none focus:border-[var(--brand)] focus:bg-white"
+          className="h-11 flex-1 rounded-full border border-input bg-background px-4 text-sm text-foreground outline-none placeholder:text-muted-foreground focus:border-[var(--brand)] focus:bg-card"
         />
         <button
           type="submit"
@@ -315,7 +319,7 @@ function MessageRow({
       <div className="max-w-[85%] space-y-2">
         <div
           className={`text-pretty rounded-2xl px-3.5 py-2 text-sm leading-relaxed ${
-            isUser ? "rounded-br-md text-white" : "rounded-bl-md border border-black/5 bg-white text-neutral-800"
+            isUser ? "rounded-br-md text-white" : "rounded-bl-md border border-border bg-card text-card-foreground"
           }`}
           style={isUser ? { background: primary } : undefined}
         >
@@ -327,11 +331,11 @@ function MessageRow({
               <button
                 key={s.name}
                 onClick={() => onService(s.name)}
-                className="rounded-xl border border-black/10 bg-white px-2.5 py-1.5 text-left text-xs transition active:scale-95 hover:border-[color:var(--brand)]"
+                className="rounded-xl border border-border bg-card px-2.5 py-1.5 text-left text-xs transition active:scale-95 hover:border-[color:var(--brand)]"
                 title={s.description ?? undefined}
               >
-                <span className="font-medium text-neutral-800">{s.name}</span>
-                {s.price && <span className="ml-1 text-neutral-500">· {s.price}</span>}
+                <span className="font-medium text-card-foreground">{s.name}</span>
+                {s.price && <span className="ml-1 text-muted-foreground">· {s.price}</span>}
               </button>
             ))}
           </div>
@@ -342,8 +346,8 @@ function MessageRow({
               <button
                 key={slot.iso}
                 onClick={() => onSlot(msg.ui!.kind === "slots" ? msg.ui!.service : "", slot)}
-                className="rounded-xl border px-2.5 py-1.5 text-xs font-medium transition active:scale-95"
-                style={{ borderColor: accent, color: primary }}
+                className="rounded-xl border px-2.5 py-1.5 text-xs font-medium text-primary transition active:scale-95"
+                style={{ borderColor: accent }}
               >
                 {slot.label}
               </button>
@@ -351,12 +355,10 @@ function MessageRow({
           </div>
         )}
         {msg.ui?.kind === "booked" && (
-          <div className="rounded-2xl border border-black/5 bg-white p-3 text-xs shadow-sm">
-            <p className="mb-1 font-semibold" style={{ color: primary }}>
-              ✓ Appointment confirmed
-            </p>
-            <p className="text-neutral-700">{msg.ui.service} · {msg.ui.when}</p>
-            <p className="text-neutral-500">with {msg.ui.with}{msg.ui.price ? ` · ${msg.ui.price}` : ""}</p>
+          <div className="rounded-2xl border border-border bg-card p-3 text-xs shadow-sm">
+            <p className="mb-1 font-semibold text-primary">✓ Appointment confirmed</p>
+            <p className="text-card-foreground">{msg.ui.service} · {msg.ui.when}</p>
+            <p className="text-muted-foreground">with {msg.ui.with}{msg.ui.price ? ` · ${msg.ui.price}` : ""}</p>
           </div>
         )}
       </div>
@@ -367,9 +369,9 @@ function MessageRow({
 function Typing() {
   return (
     <div className="flex justify-start">
-      <div className="flex gap-1 rounded-2xl rounded-bl-md border border-black/5 bg-white px-3 py-2.5">
+      <div className="flex gap-1 rounded-2xl rounded-bl-md border border-border bg-card px-3 py-2.5">
         {[0, 1, 2].map((i) => (
-          <span key={i} className="h-1.5 w-1.5 animate-bounce rounded-full bg-neutral-400" style={{ animationDelay: `${i * 120}ms` }} />
+          <span key={i} className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground" style={{ animationDelay: `${i * 120}ms` }} />
         ))}
       </div>
     </div>
@@ -393,33 +395,35 @@ function BookingForm({
   defaultName: string;
   defaultPhone: string;
   onCancel: () => void;
-  onSubmit: (form: { clientName: string; phone: string; petName?: string; serviceName: string; startISO: string }) => Promise<void>;
+  onSubmit: (form: { clientName: string; phone: string; email?: string; petName?: string; serviceName: string; startISO: string }) => Promise<void>;
 }) {
   const [clientName, setClientName] = useState(defaultName);
   const [phone, setPhone] = useState(defaultPhone);
+  const [email, setEmail] = useState("");
   const [petName, setPetName] = useState("");
   const [busy, setBusy] = useState(false);
   const valid = clientName.trim().length > 1 && phone.replace(/\D/g, "").length >= 7;
 
   return (
     <div className="absolute inset-0 z-10 flex items-end bg-black/30 p-3" onClick={onCancel}>
-      <div className="w-full rounded-2xl bg-white p-4 shadow-xl" onClick={(e) => e.stopPropagation()}>
-        <p className="text-sm font-semibold text-neutral-800">Confirm your visit</p>
-        <p className="mb-3 text-xs text-neutral-500">{service} · {label}</p>
+      <div className="w-full rounded-2xl border border-border bg-card p-4 shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <p className="text-sm font-semibold text-card-foreground">Confirm your visit</p>
+        <p className="mb-3 text-xs text-muted-foreground">{service} · {label}</p>
         <div className="space-y-2">
-          <input value={clientName} onChange={(e) => setClientName(e.target.value)} placeholder="Your name" aria-label="Your name" className="h-10 w-full rounded-xl border border-black/10 px-3 text-sm outline-none focus:border-[var(--brand)]" />
-          <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Phone number" inputMode="tel" aria-label="Phone number" className="h-10 w-full rounded-xl border border-black/10 px-3 text-sm outline-none focus:border-[var(--brand)]" />
-          <input value={petName} onChange={(e) => setPetName(e.target.value)} placeholder="Pet's name (optional)" aria-label="Pet's name" className="h-10 w-full rounded-xl border border-black/10 px-3 text-sm outline-none focus:border-[var(--brand)]" />
+          <input value={clientName} onChange={(e) => setClientName(e.target.value)} placeholder="Your name" aria-label="Your name" className="h-10 w-full rounded-xl border border-input bg-background px-3 text-sm text-foreground outline-none placeholder:text-muted-foreground focus:border-[var(--brand)]" />
+          <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Phone number" inputMode="tel" aria-label="Phone number" className="h-10 w-full rounded-xl border border-input bg-background px-3 text-sm text-foreground outline-none placeholder:text-muted-foreground focus:border-[var(--brand)]" />
+          <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email (optional — for confirmation)" type="email" inputMode="email" aria-label="Email" className="h-10 w-full rounded-xl border border-input bg-background px-3 text-sm text-foreground outline-none placeholder:text-muted-foreground focus:border-[var(--brand)]" />
+          <input value={petName} onChange={(e) => setPetName(e.target.value)} placeholder="Pet's name (optional)" aria-label="Pet's name" className="h-10 w-full rounded-xl border border-input bg-background px-3 text-sm text-foreground outline-none placeholder:text-muted-foreground focus:border-[var(--brand)]" />
         </div>
         <div className="mt-3 flex gap-2">
-          <button onClick={onCancel} className="h-10 flex-1 rounded-xl border border-black/10 text-sm text-neutral-600 transition active:scale-95">
+          <button onClick={onCancel} className="h-10 flex-1 rounded-xl border border-border text-sm text-foreground transition active:scale-95">
             Back
           </button>
           <button
             disabled={!valid || busy}
             onClick={async () => {
               setBusy(true);
-              await onSubmit({ clientName, phone, petName: petName || undefined, serviceName: service, startISO });
+              await onSubmit({ clientName, phone, email: email || undefined, petName: petName || undefined, serviceName: service, startISO });
               setBusy(false);
             }}
             className="h-10 flex-1 rounded-xl text-sm font-medium text-white transition active:scale-95 disabled:opacity-40"
