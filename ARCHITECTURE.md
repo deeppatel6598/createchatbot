@@ -80,6 +80,7 @@ flowchart TB
     DOM[Booking Domain\nlib/domain/*]
     REPO[(Repo port\nmemory | prisma)]
     EMAIL[Email\nlib/email]
+    CAL[Calendar\nlib/calendar]
     VOICE[/api/tts proxy/]
   end
 
@@ -87,6 +88,7 @@ flowchart TB
     CLAUDE[Anthropic Claude]
     EL[ElevenLabs]
     RESEND[Resend]
+    GCAL[Google Calendar]
     PG[(PostgreSQL)]
   end
 
@@ -98,7 +100,10 @@ flowchart TB
   CV --> TOOLS --> DOM --> REPO --> PG
   R --> DOM
   TOOLS --> EMAIL --> RESEND
+  TOOLS --> CAL --> GCAL
   R --> EMAIL
+  R --> CAL
+  CAL -. free/busy .-> DOM
   VOICE --> EL
 ```
 
@@ -136,8 +141,8 @@ return a `{ data }` / `{ error: { code, message } }` envelope.
 | `GET /admin/calendar` | Google Calendar sync status (for the dashboard badge) | cookie |
 | `GET /cron/reminders` | ~24h reminder send | `CRON_SECRET` |
 
-**Server libraries** (`lib/`) — domain, repos, AI, voice, email, i18n, security
-(detailed in the sections below).
+**Server libraries** (`lib/`) — domain, repos, AI, voice, email, calendar, i18n,
+security (detailed in the sections below).
 
 ## 5. Request flows
 
@@ -193,7 +198,8 @@ erDiagram
   (weekly rules; `BlackoutDate` for exceptions).
 - **Client** — name, phone, email, `attributes.pets[]`.
 - **Appointment** — `startsAt`/`endsAt`, `status` (PENDING/CONFIRMED/CANCELLED/…),
-  `googleEventId` (reserved for calendar sync), `attributes`.
+  `googleEventId` (the synced Google Calendar event), `attributes`. `Resource` carries
+  `googleCalId` to target a specific calendar (§10).
 - **KnowledgeEntry** — `kind` (FAQ/SERVICE/LOCATION/HOURS/PRICING/TEAM/…) + title/
   body/metadata; powers the concierge.
 - **Conversation / Message** — transcript storage.
