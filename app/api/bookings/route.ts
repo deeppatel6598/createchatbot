@@ -81,7 +81,7 @@ export async function POST(req: NextRequest) {
         maxAge: CLIENT_COOKIE_MAX_AGE,
       });
     }
-    // Confirmation email (best-effort; doesn't block the booking).
+    // Confirmation email + calendar invite (best-effort; doesn't block the booking).
     await notifyBookingConfirmed(business, b.email, {
       clientName: b.clientName,
       service: result.service.name,
@@ -89,6 +89,9 @@ export async function POST(req: NextRequest) {
       withName: result.resource.name,
       price,
       petName: b.petName ?? null,
+      appointmentId: result.appointment.id,
+      startISO: result.appointment.startsAt,
+      endISO: result.appointment.endsAt,
     });
     // Mirror onto the resource's calendar (best-effort; doesn't block the booking).
     await onBookingCreated(repo, business, result.appointment, result.service, result.resource, result.client);

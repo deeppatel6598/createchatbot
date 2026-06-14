@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { MemoryRepo } from "@/lib/repo/memory";
 import type { Business } from "@/lib/types";
 import {
+  buildBookingInvite,
   bookingConfirmationTemplate,
   contactNotificationTemplate,
   emailConfigured,
@@ -47,5 +48,37 @@ describe("email", () => {
     await expect(
       notifyBookingConfirmed(await biz(), null, { clientName: "X", service: "Y", when: "Z", withName: "W" }),
     ).resolves.toBeUndefined();
+  });
+
+  it("builds a calendar invite attachment when given the appointment times", async () => {
+    const invite = buildBookingInvite(await biz(), "sara@example.com", {
+      clientName: "Sara Lopez",
+      service: "Wellness Exam",
+      when: "Friday at 1:00 PM",
+      withName: "Dr. Reyes",
+      petName: "Bella",
+      appointmentId: "appt_1",
+      startISO: "2026-06-16T13:00:00.000Z",
+      endISO: "2026-06-16T13:30:00.000Z",
+    });
+    expect(invite).not.toBeNull();
+    expect(invite!.filename).toBe("invite.ics");
+    expect(invite!.contentType).toContain("text/calendar");
+    const decoded = Buffer.from(invite!.content, "base64").toString("utf8");
+    expect(decoded).toContain("BEGIN:VEVENT");
+    expect(decoded).toContain("UID:appt-appt_1@paws-and-care");
+    expect(decoded).toContain("DTSTART:20260616T130000Z");
+    expect(decoded).toContain("ATTENDEE");
+  });
+
+  it("returns no invite when the times are missing", async () => {
+    expect(
+      buildBookingInvite(await biz(), "sara@example.com", {
+        clientName: "Sara",
+        service: "Wellness Exam",
+        when: "Friday",
+        withName: "Dr. Reyes",
+      }),
+    ).toBeNull();
   });
 });

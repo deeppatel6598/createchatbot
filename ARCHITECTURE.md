@@ -59,7 +59,7 @@ Google Calendar sync (push events + free/busy).
 | Email | Resend (HTTP) with console-outbox fallback |
 | Calendar | Google Calendar (OAuth2 refresh-token) with keyless no-op fallback |
 | Validation | Zod on every API boundary |
-| Tests | Vitest (43 specs) |
+| Tests | Vitest (52 specs) |
 | Hosting | Vercel + managed Postgres (Neon/Supabase); Redis (future) |
 
 ## 3. System architecture
@@ -268,13 +268,22 @@ the prompt rule; the keyless fallback localizes its own phrasing and the
 flows work and are testable with zero setup. HTML-escaped, branded templates for:
 
 - **Booking confirmation** — sent from `/api/bookings` and the chat
-  `create_booking` tool (best-effort; never blocks a booking).
+  `create_booking` tool (best-effort; never blocks a booking). It carries a
+  **calendar invite** so the client can add the visit in one tap (see below).
 - **Contact notification** — `/api/contact` emails the clinic inbox.
 - **Reminder** — `GET /api/cron/reminders` (guarded by `CRON_SECRET`, idempotent)
   sends to appointments ~24h out; wire to a scheduler (e.g. Vercel Cron).
 
 External sends happen **outside** DB transactions (Prisma timeout trap) and never
 fail the originating request.
+
+**Calendar invites (`.ics`).** `lib/ics.ts` is a dependency-free, RFC 5545
+iCalendar builder (UTC stamps, TEXT escaping, 75-octet line folding, CRLF
+endings, `METHOD`/`STATUS`/`SEQUENCE`). The email layer attaches a `text/calendar`
+`REQUEST` invite to the confirmation, so clients on **any** provider
+(Apple/Google/Outlook) add the appointment with one tap — with **zero setup**,
+independent of the staff-side Google Calendar sync. The attachment rides Resend's
+`attachments` field, and the console outbox logs it for keyless testing.
 
 ### Calendar sync
 
@@ -351,7 +360,7 @@ noted; unset integrations fall back safely.
 
 ## 14. Testing
 
-43 Vitest specs (`npm test`), no external services required:
+52 Vitest specs (`npm test`), no external services required:
 
 - **Domain** — availability derivation, conflict-free booking, **concurrency**
   double-booking, reschedule/cancel.
@@ -362,6 +371,8 @@ noted; unset integrations fall back safely.
 - **Email** — outbox fallback + template building/escaping.
 - **Calendar** — request/free-busy builders, event mapping, keyless no-op
   fallback, and free/busy folding into the offered slots.
+- **`.ics` invites** — UTC stamps, escaping, line folding, CRLF, cancellations,
+  and the confirmation-email attachment.
 - **Security** — rate limiter, admin auth, fail-closed secrets.
 
 Plus lint (`eslint`) and a production `next build` typecheck gate on every change.
@@ -375,8 +386,9 @@ Plus lint (`eslint`) and a production `next build` typecheck gate on every chang
 - **Google Calendar sync** is implemented (push/reschedule/cancel events +
   free/busy in the offered slots; see §10). Two-way sync (a push-notification
   channel that ingests externally-created events) is the natural next step.
-- **Remaining roadmap:** waitlist/cancellation fill, `.ics` invites, analytics,
-  shared-store rate limiting, and Auth.js for per-staff admin roles.
+- **`.ics` calendar invites** ship on every confirmation email (§10).
+- **Remaining roadmap:** waitlist/cancellation fill, analytics, shared-store rate
+  limiting, and Auth.js for per-staff admin roles.
 
 ## 16. Directory map
 
@@ -397,7 +409,7 @@ apps/assistant/
 │   ├── ai/{concierge,tools,prompt,fallback,types}.ts
 │   ├── calendar/{index,google}.ts                  # Google Calendar sync + free/busy
 │   ├── voice/{index,webspeech,elevenlabs,elevenlabs-server}.ts
-│   ├── email.ts · lang.ts                          # notifications + i18n
+│   ├── email.ts · ics.ts · lang.ts                 # notifications + .ics invites + i18n
 │   ├── admin-auth.ts · client-session.ts · secret.ts · rate-limit.ts
 │   └── context.ts · prisma.ts
 ├── prisma/{schema.prisma,constraints.sql,seed.ts}

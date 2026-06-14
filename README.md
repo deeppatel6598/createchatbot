@@ -64,6 +64,7 @@ lib/
   repo/                    memory (demo) + prisma (Postgres) implementations
   ai/                      tools (agent-harness shape), prompt, concierge loop, fallback
   calendar/                Google Calendar sync (push events + free/busy) + no-op fallback
+  email.ts · ics.ts        confirmation/reminder email + RFC 5545 .ics invite builder
   voice/webspeech.ts       browser STT + persona-tuned warm TTS
 prisma/
   schema.prisma            multi-tenant schema
@@ -89,8 +90,8 @@ Patterns came from the skills in this monorepo (`ecc/`, `superpowers/`):
 
 ## Roadmap (fast-follows)
 
-Waitlist/cancellation fill, `.ics` invites, shared-store rate limiting, and
-Auth.js per-staff roles. See the plan for the full phased roadmap.
+Waitlist/cancellation fill, shared-store rate limiting, and Auth.js per-staff
+roles. See the plan for the full phased roadmap.
 
 **Done:** booking domain · AI concierge (Claude + keyless fallback) · chat+voice
 widget · ElevenLabs production voice (Web Speech fallback) · staff admin
@@ -100,4 +101,6 @@ pages · security hardening (CSP, headers, rate limiting, fail-closed secrets) �
 **email** — confirmation on booking, contact-form notifications, and a
 reminder cron endpoint, via Resend with a keyless console-outbox fallback ·
 **Google Calendar sync** — bookings push/reschedule/cancel events and the offered
-times honor each vet's free/busy, behind OAuth env vars with a keyless no-op fallback.
+times honor each vet's free/busy, behind OAuth env vars with a keyless no-op fallback ·
+**calendar invites** — every confirmation email carries a standards-compliant `.ics`
+so the client adds the visit to Apple/Google/Outlook in one tap (zero setup).

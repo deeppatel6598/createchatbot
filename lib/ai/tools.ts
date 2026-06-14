@@ -259,6 +259,9 @@ export async function dispatchTool(
           withName: result.resource.name,
           price: money(result.service.priceCents),
           petName: input.pet_name ? String(input.pet_name) : null,
+          appointmentId: result.appointment.id,
+          startISO: result.appointment.startsAt,
+          endISO: result.appointment.endsAt,
         });
         // Mirror the booking onto the resource's calendar (best-effort).
         await onBookingCreated(repo, business, result.appointment, result.service, result.resource, result.client);
