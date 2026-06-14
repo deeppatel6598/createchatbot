@@ -1,4 +1,4 @@
-import type { Business, KnowledgeKind, Repo } from "@/lib/types";
+import type { BusyInterval, Business, KnowledgeKind, Repo } from "@/lib/types";
 import { ConflictError, NotFoundError } from "@/lib/types";
 import { getAvailableSlots } from "@/lib/domain/availability";
 import {
@@ -9,6 +9,13 @@ import {
 import { formatDateTime, formatSlotLabel } from "@/lib/domain/time";
 import { loadClientContext } from "@/lib/domain/client-context";
 import { notifyBookingConfirmed } from "@/lib/email";
+import {
+  busyByResource,
+  calendarConfigured,
+  onBookingCancelled,
+  onBookingCreated,
+  onBookingRescheduled,
+} from "@/lib/calendar";
 
 /**
  * Tool layer for the concierge. Follows the agent-harness-construction skill:
@@ -206,9 +213,20 @@ export async function dispatchTool(
             next_actions: ["Ask which of the listed services they'd like."],
           };
         }
+        const days = Number(input.days) || 7;
+        // Fold each vet's external (Google) calendar into the offered times.
+        let extraBusy: Record<string, BusyInterval[]> | undefined;
+        if (calendarConfigured()) {
+          const resources = await repo.listResources(business.id);
+          const from = new Date();
+          from.setHours(0, 0, 0, 0);
+          const to = new Date(from.getTime() + days * 24 * 60 * 60 * 1000);
+          extraBusy = await busyByResource(resources, from.toISOString(), to.toISOString());
+        }
         const slots = await getAvailableSlots(repo, business, service, {
-          days: Number(input.days) || 7,
+          days,
           max: 6,
+          extraBusy,
         });
         return {
           status: slots.length ? "success" : "warning",
@@ -242,6 +260,8 @@ export async function dispatchTool(
           price: money(result.service.priceCents),
           petName: input.pet_name ? String(input.pet_name) : null,
         });
+        // Mirror the booking onto the resource's calendar (best-effort).
+        await onBookingCreated(repo, business, result.appointment, result.service, result.resource, result.client);
         return {
           status: "success",
           summary: `Booked ${result.service.name} on ${formatDateTime(result.appointment.startsAt)} with ${result.resource.name}.`,
@@ -257,6 +277,11 @@ export async function dispatchTool(
       }
 
       case "reschedule_booking": {
+        // Capture the appointment we're about to move so we can update its event.
+        const nowISO = new Date().toISOString();
+        const previous = (await repo.getAppointmentsByPhone(business.id, String(input.phone))).find(
+          (a) => a.status === "CONFIRMED" && a.startsAt > nowISO,
+        );
         const appt = await rescheduleUpcomingByPhone(
           repo,
           business,
@@ -264,12 +289,14 @@ export async function dispatchTool(
           String(input.new_start_iso),
         );
         if (!appt) return { status: "warning", summary: "No upcoming appointment found for that phone." };
+        if (previous) await onBookingRescheduled(repo, business, previous, appt);
         return { status: "success", summary: `Moved to ${formatDateTime(appt.startsAt)}.`, data: { when: formatDateTime(appt.startsAt) } };
       }
 
       case "cancel_booking": {
         const appt = await cancelUpcomingByPhone(repo, business, String(input.phone));
         if (!appt) return { status: "warning", summary: "No upcoming appointment found for that phone." };
+        await onBookingCancelled(repo, business, appt);
         return { status: "success", summary: "Appointment cancelled.", data: { id: appt.id } };
       }
 

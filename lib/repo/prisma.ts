@@ -39,7 +39,7 @@ export class PrismaRepo implements Repo {
   async listResources(businessId: string): Promise<Resource[]> {
     return this.db.resource.findMany({
       where: { businessId },
-      select: { id: true, businessId: true, name: true, role: true },
+      select: { id: true, businessId: true, name: true, role: true, googleCalId: true },
     });
   }
 
@@ -203,7 +203,7 @@ export class PrismaRepo implements Repo {
 
   async updateAppointment(
     id: string,
-    patch: Partial<Pick<Appointment, "startsAt" | "endsAt" | "status">>,
+    patch: Partial<Pick<Appointment, "startsAt" | "endsAt" | "status" | "googleEventId">>,
   ): Promise<Appointment> {
     const row = await this.db.appointment.update({
       where: { id },
@@ -211,6 +211,7 @@ export class PrismaRepo implements Repo {
         ...(patch.startsAt ? { startsAt: new Date(patch.startsAt) } : {}),
         ...(patch.endsAt ? { endsAt: new Date(patch.endsAt) } : {}),
         ...(patch.status ? { status: patch.status } : {}),
+        ...(patch.googleEventId !== undefined ? { googleEventId: patch.googleEventId } : {}),
       },
     });
     return this.toAppt(row);
@@ -225,6 +226,7 @@ export class PrismaRepo implements Repo {
     startsAt: Date;
     endsAt: Date;
     status: string;
+    googleEventId?: string | null;
     notes: string | null;
     attributes: unknown;
   }): Appointment => ({
@@ -236,6 +238,7 @@ export class PrismaRepo implements Repo {
     startsAt: iso(r.startsAt),
     endsAt: iso(r.endsAt),
     status: r.status as Appointment["status"],
+    googleEventId: r.googleEventId ?? null,
     notes: r.notes,
     attributes: (r.attributes as Record<string, unknown>) ?? null,
   });

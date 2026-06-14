@@ -56,6 +56,14 @@ export interface Resource {
   businessId: string;
   name: string;
   role?: string | null;
+  /** Google Calendar id this resource's bookings sync to (else the default). */
+  googleCalId?: string | null;
+}
+
+/** A busy time range, e.g. from an external calendar's free/busy query. */
+export interface BusyInterval {
+  startISO: string;
+  endISO: string;
 }
 
 export interface AvailabilityRule {
@@ -98,6 +106,8 @@ export interface Appointment {
   startsAt: string; // ISO
   endsAt: string; // ISO
   status: ApptStatus;
+  /** Synced Google Calendar event id, when calendar sync is enabled. */
+  googleEventId?: string | null;
   notes?: string | null;
   attributes?: Record<string, unknown> | null;
 }
@@ -181,7 +191,7 @@ export interface Repo {
   ): Promise<Appointment[]>;
   updateAppointment(
     id: string,
-    patch: Partial<Pick<Appointment, "startsAt" | "endsAt" | "status">>,
+    patch: Partial<Pick<Appointment, "startsAt" | "endsAt" | "status" | "googleEventId">>,
   ): Promise<Appointment>;
 }
 

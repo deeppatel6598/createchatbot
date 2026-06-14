@@ -285,7 +285,7 @@ export class MemoryRepo implements Repo {
 
   async updateAppointment(
     id: string,
-    patch: Partial<Pick<Appointment, "startsAt" | "endsAt" | "status">>,
+    patch: Partial<Pick<Appointment, "startsAt" | "endsAt" | "status" | "googleEventId">>,
   ) {
     const appt = this.appointments.find((a) => a.id === id);
     if (!appt) throw new Error("Appointment not found");

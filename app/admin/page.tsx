@@ -24,6 +24,14 @@ export default function AdminPage() {
   const [loginError, setLoginError] = useState("");
   const [busyId, setBusyId] = useState<string | null>(null);
   const [reschedule, setReschedule] = useState<{ id: string; service: string; slots: Slot[] } | null>(null);
+  const [calendarOn, setCalendarOn] = useState(false);
+
+  const loadCalendar = useCallback(async () => {
+    const res = await fetch("/api/admin/calendar", { cache: "no-store" });
+    if (!res.ok) return;
+    const json = await res.json();
+    setCalendarOn(Boolean(json.data?.configured));
+  }, []);
 
   const load = useCallback(async () => {
     const res = await fetch("/api/admin/bookings", { cache: "no-store" });
@@ -34,7 +42,8 @@ export default function AdminPage() {
     const json = await res.json();
     setBookings(json.data ?? []);
     setStatus("ready");
-  }, []);
+    void loadCalendar();
+  }, [loadCalendar]);
 
   useEffect(() => {
     let active = true;
@@ -48,6 +57,7 @@ export default function AdminPage() {
         const json = await res.json();
         setBookings(json.data ?? []);
         setStatus("ready");
+        void loadCalendar();
       })
       .catch(() => {
         if (active) setStatus("login");
@@ -55,7 +65,7 @@ export default function AdminPage() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [loadCalendar]);
 
   const login = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -140,7 +150,16 @@ export default function AdminPage() {
       <header className="flex items-center justify-between border-b border-border bg-card px-6 py-4">
         <div>
           <h1 className="text-lg font-semibold text-foreground">Bookings</h1>
-          <p className="text-xs text-muted-foreground">Paws &amp; Care — staff dashboard</p>
+          <p className="text-xs text-muted-foreground">
+            Paws &amp; Care — staff dashboard
+            <span
+              title={calendarOn ? "Bookings sync to Google Calendar" : "Set GOOGLE_* env vars to sync bookings to Google Calendar"}
+              className={`ml-2 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] ${calendarOn ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"}`}
+            >
+              <span className={`h-1.5 w-1.5 rounded-full ${calendarOn ? "bg-primary" : "bg-muted-foreground/50"}`} />
+              Calendar sync {calendarOn ? "on" : "off"}
+            </span>
+          </p>
         </div>
         <div className="flex gap-2">
           <button onClick={() => void load()} className="rounded-lg border border-border px-3 py-1.5 text-sm text-muted-foreground transition active:scale-95 hover:bg-muted hover:text-foreground">

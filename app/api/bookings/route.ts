@@ -7,6 +7,7 @@ import { ConflictError, NotFoundError } from "@/lib/types";
 import { CLIENT_COOKIE, CLIENT_COOKIE_MAX_AGE, signClientId } from "@/lib/client-session";
 import { rateLimit } from "@/lib/rate-limit";
 import { notifyBookingConfirmed } from "@/lib/email";
+import { onBookingCreated } from "@/lib/calendar";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -89,6 +90,8 @@ export async function POST(req: NextRequest) {
       price,
       petName: b.petName ?? null,
     });
+    // Mirror onto the resource's calendar (best-effort; doesn't block the booking).
+    await onBookingCreated(repo, business, result.appointment, result.service, result.resource, result.client);
     return res;
   } catch (err) {
     if (err instanceof ConflictError)
