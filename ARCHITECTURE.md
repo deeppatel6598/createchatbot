@@ -44,7 +44,8 @@ human-sounding persona.
 **Capabilities:** conversational booking (book/reschedule/cancel, conflict-free),
 full brand concierge (location, hours, facilities, services, pricing, team),
 warm human voice, multilingual, returning-client memory, no-medical-advice
-safety, staff admin dashboard, light/dark UI, email confirmations & reminders.
+safety, staff admin dashboard, light/dark UI, email confirmations & reminders,
+Google Calendar sync (push events + free/busy).
 
 ## 2. Tech stack
 
@@ -56,8 +57,9 @@ safety, staff admin dashboard, light/dark UI, email confirmations & reminders.
 | Persistence | PostgreSQL via Prisma 6 (optional) — in-memory repo otherwise |
 | Voice | ElevenLabs (server proxy) with Web Speech API fallback |
 | Email | Resend (HTTP) with console-outbox fallback |
+| Calendar | Google Calendar (OAuth2 refresh-token) with keyless no-op fallback |
 | Validation | Zod on every API boundary |
-| Tests | Vitest (31 specs) |
+| Tests | Vitest (52 specs) |
 | Hosting | Vercel + managed Postgres (Neon/Supabase); Redis (future) |
 
 ## 3. System architecture
@@ -78,6 +80,7 @@ flowchart TB
     DOM[Booking Domain\nlib/domain/*]
     REPO[(Repo port\nmemory | prisma)]
     EMAIL[Email\nlib/email]
+    CAL[Calendar\nlib/calendar]
     VOICE[/api/tts proxy/]
   end
 
@@ -85,6 +88,7 @@ flowchart TB
     CLAUDE[Anthropic Claude]
     EL[ElevenLabs]
     RESEND[Resend]
+    GCAL[Google Calendar]
     PG[(PostgreSQL)]
   end
 
@@ -96,7 +100,10 @@ flowchart TB
   CV --> TOOLS --> DOM --> REPO --> PG
   R --> DOM
   TOOLS --> EMAIL --> RESEND
+  TOOLS --> CAL --> GCAL
   R --> EMAIL
+  R --> CAL
+  CAL -. free/busy .-> DOM
   VOICE --> EL
 ```
 
@@ -131,10 +138,11 @@ return a `{ data }` / `{ error: { code, message } }` envelope.
 | `POST /tts` | ElevenLabs synthesis proxy (streams mp3) | public, rate-limited |
 | `POST /admin/login` · `/admin/logout` | staff session | password, rate-limited |
 | `GET /admin/bookings` · `PATCH`/`DELETE /admin/bookings/:id` | manage bookings | cookie |
+| `GET /admin/calendar` | Google Calendar sync status (for the dashboard badge) | cookie |
 | `GET /cron/reminders` | ~24h reminder send | `CRON_SECRET` |
 
-**Server libraries** (`lib/`) — domain, repos, AI, voice, email, i18n, security
-(detailed in the sections below).
+**Server libraries** (`lib/`) — domain, repos, AI, voice, email, calendar, i18n,
+security (detailed in the sections below).
 
 ## 5. Request flows
 
@@ -146,8 +154,9 @@ return a `{ data }` / `{ error: { code, message } }` envelope.
    keyless fallback).
 3. Tools call the **booking domain** through the `Repo` port: `check_availability`
    returns real slots; `create_booking` writes the appointment conflict-free.
-4. On success a confirmation email is queued (best-effort) and a signed
-   returning-client cookie is set.
+4. On success a confirmation email is queued, the booking is mirrored to the
+   resource's Google Calendar (both best-effort), and a signed returning-client
+   cookie is set.
 5. Reply (and any UI hint — service/slot chips, booked card) returns to the
    widget; if voice is on, it's spoken.
 
@@ -189,7 +198,8 @@ erDiagram
   (weekly rules; `BlackoutDate` for exceptions).
 - **Client** — name, phone, email, `attributes.pets[]`.
 - **Appointment** — `startsAt`/`endsAt`, `status` (PENDING/CONFIRMED/CANCELLED/…),
-  `googleEventId` (reserved for calendar sync), `attributes`.
+  `googleEventId` (the synced Google Calendar event), `attributes`. `Resource` carries
+  `googleCalId` to target a specific calendar (§10).
 - **KnowledgeEntry** — `kind` (FAQ/SERVICE/LOCATION/HOURS/PRICING/TEAM/…) + title/
   body/metadata; powers the concierge.
 - **Conversation / Message** — transcript storage.
@@ -258,13 +268,46 @@ the prompt rule; the keyless fallback localizes its own phrasing and the
 flows work and are testable with zero setup. HTML-escaped, branded templates for:
 
 - **Booking confirmation** — sent from `/api/bookings` and the chat
-  `create_booking` tool (best-effort; never blocks a booking).
+  `create_booking` tool (best-effort; never blocks a booking). It carries a
+  **calendar invite** so the client can add the visit in one tap (see below).
 - **Contact notification** — `/api/contact` emails the clinic inbox.
 - **Reminder** — `GET /api/cron/reminders` (guarded by `CRON_SECRET`, idempotent)
   sends to appointments ~24h out; wire to a scheduler (e.g. Vercel Cron).
 
 External sends happen **outside** DB transactions (Prisma timeout trap) and never
 fail the originating request.
+
+**Calendar invites (`.ics`).** `lib/ics.ts` is a dependency-free, RFC 5545
+iCalendar builder (UTC stamps, TEXT escaping, 75-octet line folding, CRLF
+endings, `METHOD`/`STATUS`/`SEQUENCE`). The email layer attaches a `text/calendar`
+`REQUEST` invite to the confirmation, so clients on **any** provider
+(Apple/Google/Outlook) add the appointment with one tap — with **zero setup**,
+independent of the staff-side Google Calendar sync. The attachment rides Resend's
+`attachments` field, and the console outbox logs it for keyless testing.
+
+### Calendar sync
+
+`lib/calendar/` mirrors bookings to **Google Calendar** and folds each resource's
+external commitments into the offered times, following the same provider pattern
+as voice/email — pure, unit-tested request builders (`google.ts`) with thin
+`fetch` wrappers, plus a keyless **no-op fallback** so the app runs with zero
+setup.
+
+- **Auth:** OAuth2 refresh-token grant. The business connects one Google account
+  that owns/shares the resource calendars; we exchange its refresh token for
+  short-lived access tokens server-side (cached in-process). All calls are
+  server-side `fetch`, so no CSP change and the credentials never reach the browser.
+- **Lifecycle (best-effort, never blocks a booking):** `onBookingCreated` pushes
+  an event and persists its id to `Appointment.googleEventId`; `onBookingRescheduled`
+  removes the old event and creates a new one; `onBookingCancelled` deletes it.
+  Wired into `/api/bookings`, the `create_booking`/`reschedule_booking`/`cancel_booking`
+  tools, and the admin `PATCH`/`DELETE` routes.
+- **Free/busy:** `check_availability` queries each resource's calendar over the
+  search window and passes the busy intervals to `getAvailableSlots`, which skips
+  any candidate that overlaps — so we never offer a time the vet is busy elsewhere.
+- **Per-resource calendars:** `Resource.googleCalId` targets a specific calendar
+  (else `GOOGLE_CALENDAR_ID`, default `primary`). The staff dashboard shows a
+  "Calendar sync on/off" badge via `GET /api/admin/calendar`.
 
 ## 11. Security architecture
 
@@ -302,6 +345,7 @@ noted; unset integrations fall back safely.
 | `DATABASE_URL` | enables Postgres (else in-memory) |
 | `ELEVENLABS_API_KEY` / `_VOICE_ID` / `_MODEL` | production voice (else Web Speech) |
 | `RESEND_API_KEY` / `EMAIL_FROM` / `CLINIC_EMAIL` | real email (else outbox) |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` / `GOOGLE_REFRESH_TOKEN` / `GOOGLE_CALENDAR_ID` | Google Calendar sync + free/busy (else no-op) |
 | `CRON_SECRET` | guards the reminder endpoint |
 | `ADMIN_SECRET` / `ADMIN_PASSWORD` | **required in production** for admin |
 
@@ -316,7 +360,7 @@ noted; unset integrations fall back safely.
 
 ## 14. Testing
 
-31 Vitest specs (`npm test`), no external services required:
+52 Vitest specs (`npm test`), no external services required:
 
 - **Domain** — availability derivation, conflict-free booking, **concurrency**
   double-booking, reschedule/cancel.
@@ -325,6 +369,10 @@ noted; unset integrations fall back safely.
 - **i18n** — language detection + localization.
 - **Voice** — ElevenLabs request builder (warm settings).
 - **Email** — outbox fallback + template building/escaping.
+- **Calendar** — request/free-busy builders, event mapping, keyless no-op
+  fallback, and free/busy folding into the offered slots.
+- **`.ics` invites** — UTC stamps, escaping, line folding, CRLF, cancellations,
+  and the confirmation-email attachment.
 - **Security** — rate limiter, admin auth, fail-closed secrets.
 
 Plus lint (`eslint`) and a production `next build` typecheck gate on every change.
@@ -335,9 +383,11 @@ Plus lint (`eslint`) and a production `next build` typecheck gate on every chang
   staff, and knowledge — no code change. Per-vertical fields go in `Json`.
 - **Embeddable widget:** the chat widget is self-contained and brand-themed for
   multi-site embedding (a fast-follow once `frame-ancestors` is relaxed per host).
-- **Remaining roadmap:** **Google Calendar sync** (push events + free/busy;
-  `Appointment.googleEventId` and `Resource.googleCalId` are already reserved),
-  waitlist/cancellation fill, `.ics` invites, analytics, shared-store rate
+- **Google Calendar sync** is implemented (push/reschedule/cancel events +
+  free/busy in the offered slots; see §10). Two-way sync (a push-notification
+  channel that ingests externally-created events) is the natural next step.
+- **`.ics` calendar invites** ship on every confirmation email (§10).
+- **Remaining roadmap:** waitlist/cancellation fill, analytics, shared-store rate
   limiting, and Auth.js for per-staff admin roles.
 
 ## 16. Directory map
@@ -350,15 +400,16 @@ apps/assistant/
 │   ├── api/                                        # route handlers
 │   │   ├── business · chat · availability · bookings · client/me
 │   │   ├── contact · tts · cron/reminders
-│   │   └── admin/{login,logout,bookings,bookings/[id]}
+│   │   └── admin/{login,logout,bookings,bookings/[id],calendar}
 │   ├── layout.tsx · globals.css                    # theming
 ├── lib/
 │   ├── types.ts                                    # domain types + Repo port
 │   ├── domain/{availability,booking,client-context,time}.ts
 │   ├── repo/{index,memory,prisma}.ts               # persistence
 │   ├── ai/{concierge,tools,prompt,fallback,types}.ts
+│   ├── calendar/{index,google}.ts                  # Google Calendar sync + free/busy
 │   ├── voice/{index,webspeech,elevenlabs,elevenlabs-server}.ts
-│   ├── email.ts · lang.ts                          # notifications + i18n
+│   ├── email.ts · ics.ts · lang.ts                 # notifications + .ics invites + i18n
 │   ├── admin-auth.ts · client-session.ts · secret.ts · rate-limit.ts
 │   └── context.ts · prisma.ts
 ├── prisma/{schema.prisma,constraints.sql,seed.ts}

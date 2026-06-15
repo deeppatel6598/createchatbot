@@ -5,6 +5,7 @@ import { loadContext } from "@/lib/context";
 import { rescheduleAppointment } from "@/lib/domain/booking";
 import { formatDateTime } from "@/lib/domain/time";
 import { ConflictError, NotFoundError } from "@/lib/types";
+import { onBookingCancelled, onBookingRescheduled } from "@/lib/calendar";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -35,6 +36,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   try {
     const moved = await rescheduleAppointment(repo, business, appt, parsed.data.newStartISO);
+    // Reflect the move on the calendar (best-effort; doesn't block the response).
+    await onBookingRescheduled(repo, business, appt, moved);
     return NextResponse.json({ data: { id: moved.id, when: formatDateTime(moved.startsAt), startISO: moved.startsAt } });
   } catch (err) {
     if (err instanceof ConflictError) return NextResponse.json({ error: { code: "slot_taken", message: err.message } }, { status: 409 });
@@ -50,9 +53,13 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     return NextResponse.json({ error: { code: "unauthorized", message: "Sign in" } }, { status: 401 });
   }
   const { id } = await params;
-  const { repo } = await loadContext();
+  const { repo, business } = await loadContext();
   try {
+    // Load first so we have the synced event id to remove from the calendar.
+    const all = await repo.listAppointments(business.id, { includeCancelled: true });
+    const existing = all.find((a) => a.id === id);
     const cancelled = await repo.updateAppointment(id, { status: "CANCELLED" });
+    if (existing) await onBookingCancelled(repo, business, existing);
     return NextResponse.json({ data: { id: cancelled.id, status: cancelled.status } });
   } catch {
     return NextResponse.json({ error: { code: "not_found", message: "Appointment not found" } }, { status: 404 });

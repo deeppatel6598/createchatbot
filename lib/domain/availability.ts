@@ -1,4 +1,4 @@
-import { Appointment, Business, Repo, Resource, Service } from "@/lib/types";
+import { Appointment, Business, BusyInterval, Repo, Resource, Service } from "@/lib/types";
 import { addMinutes } from "date-fns";
 import { atMinutes, minutesOfDay } from "./time";
 
@@ -15,6 +15,10 @@ function overlapsAny(appts: Appointment[], startISO: string, endISO: string) {
   return appts.some((a) => a.startsAt < endISO && startISO < a.endsAt);
 }
 
+function overlapsBusy(busy: BusyInterval[] | undefined, startISO: string, endISO: string) {
+  return Boolean(busy?.some((b) => b.startISO < endISO && startISO < b.endISO));
+}
+
 /**
  * Compute genuinely-bookable start times for a service across the next `days`,
  * from the resources' weekly availability minus existing appointments.
@@ -24,10 +28,11 @@ export async function getAvailableSlots(
   repo: Repo,
   business: Business,
   service: Service,
-  opts: { days?: number; max?: number } = {},
+  opts: { days?: number; max?: number; extraBusy?: Record<string, BusyInterval[]> } = {},
 ): Promise<Slot[]> {
   const days = opts.days ?? 7;
   const max = opts.max ?? 6;
+  const extraBusy = opts.extraBusy ?? {};
   const now = new Date();
   const earliest = addMinutes(now, LEAD_MIN);
 
@@ -57,6 +62,8 @@ export async function getAvailableSlots(
           const endISO = addMinutes(start, service.durationMin).toISOString();
           const startISO = start.toISOString();
           if (overlapsAny(appts, startISO, endISO)) continue;
+          // Respect the resource's external (Google) calendar, when synced.
+          if (overlapsBusy(extraBusy[resource.id], startISO, endISO)) continue;
           slots.push({ iso: startISO, resourceId: resource.id, resourceName: resource.name });
         }
       }

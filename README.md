@@ -27,6 +27,8 @@ Add capabilities by setting env vars (copy `.env.example` → `.env.local`):
 - `ANTHROPIC_API_KEY` → full natural, tool-using conversation (Claude).
 - `DATABASE_URL` → Postgres persistence (`npm run db:push && npm run seed`).
 - `ELEVENLABS_API_KEY` → the warm, human production voice (see the plan).
+- `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` / `GOOGLE_REFRESH_TOKEN` → sync
+  bookings to Google Calendar and respect each vet's free/busy (else a no-op).
 
 **Staff dashboard:** visit `/admin` (demo password `letmein`, set via
 `ADMIN_PASSWORD`) to view, reschedule, and cancel bookings.
@@ -61,6 +63,8 @@ lib/
   domain/                  availability, booking, time — pure & unit-tested
   repo/                    memory (demo) + prisma (Postgres) implementations
   ai/                      tools (agent-harness shape), prompt, concierge loop, fallback
+  calendar/                Google Calendar sync (push events + free/busy) + no-op fallback
+  email.ts · ics.ts        confirmation/reminder email + RFC 5545 .ics invite builder
   voice/webspeech.ts       browser STT + persona-tuned warm TTS
 prisma/
   schema.prisma            multi-tenant schema
@@ -86,7 +90,8 @@ Patterns came from the skills in this monorepo (`ecc/`, `superpowers/`):
 
 ## Roadmap (fast-follows)
 
-Google Calendar sync. See the plan for the full phased roadmap.
+Waitlist/cancellation fill, shared-store rate limiting, and Auth.js per-staff
+roles. See the plan for the full phased roadmap.
 
 **Done:** booking domain · AI concierge (Claude + keyless fallback) · chat+voice
 widget · ElevenLabs production voice (Web Speech fallback) · staff admin
@@ -94,4 +99,8 @@ dashboard · returning-client memory · multilingual (en/es/fr/de/pt/hi, voice
 follows the language, safety line localized) · light/dark theming + About/Contact
 pages · security hardening (CSP, headers, rate limiting, fail-closed secrets) ·
 **email** — confirmation on booking, contact-form notifications, and a
-reminder cron endpoint, via Resend with a keyless console-outbox fallback.
+reminder cron endpoint, via Resend with a keyless console-outbox fallback ·
+**Google Calendar sync** — bookings push/reschedule/cancel events and the offered
+times honor each vet's free/busy, behind OAuth env vars with a keyless no-op fallback ·
+**calendar invites** — every confirmation email carries a standards-compliant `.ics`
+so the client adds the visit to Apple/Google/Outlook in one tap (zero setup).

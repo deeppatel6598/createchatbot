@@ -1,4 +1,5 @@
 import type { Business } from "@/lib/types";
+import { buildICS } from "@/lib/ics";
 
 /**
  * Email layer. Sends via Resend when RESEND_API_KEY is set; otherwise logs to a
@@ -7,11 +8,19 @@ import type { Business } from "@/lib/types";
  * called over plain fetch (no SDK dependency). External send happens outside any
  * DB transaction (prisma-patterns) and is best-effort — it never blocks a booking.
  */
+export interface EmailAttachment {
+  filename: string;
+  /** Base64-encoded file content. */
+  content: string;
+  contentType?: string;
+}
+
 export interface EmailMessage {
   to: string;
   subject: string;
   html: string;
   text: string;
+  attachments?: EmailAttachment[];
 }
 
 export interface EmailResult {
@@ -30,7 +39,8 @@ export async function sendEmail(msg: EmailMessage): Promise<EmailResult> {
   const from = process.env.EMAIL_FROM || "Paws & Care <onboarding@resend.dev>";
 
   if (!key) {
-    console.log(`[email:outbox] to=${msg.to} subject=${JSON.stringify(msg.subject)}`);
+    const attach = msg.attachments?.length ? ` attachments=${msg.attachments.map((a) => a.filename).join(",")}` : "";
+    console.log(`[email:outbox] to=${msg.to} subject=${JSON.stringify(msg.subject)}${attach}`);
     return { ok: true, provider: "console" };
   }
 
@@ -38,7 +48,22 @@ export async function sendEmail(msg: EmailMessage): Promise<EmailResult> {
     const res = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ from, to: msg.to, subject: msg.subject, html: msg.html, text: msg.text }),
+      body: JSON.stringify({
+        from,
+        to: msg.to,
+        subject: msg.subject,
+        html: msg.html,
+        text: msg.text,
+        ...(msg.attachments?.length
+          ? {
+              attachments: msg.attachments.map((a) => ({
+                filename: a.filename,
+                content: a.content,
+                ...(a.contentType ? { content_type: a.contentType } : {}),
+              })),
+            }
+          : {}),
+      }),
     });
     if (!res.ok) {
       return { ok: false, provider: "resend", error: `resend ${res.status}` };
@@ -75,6 +100,11 @@ export interface BookingEmailData {
   withName: string;
   price?: string | null;
   petName?: string | null;
+  /** When set (with startISO/endISO), a calendar invite is attached. */
+  appointmentId?: string;
+  startISO?: string;
+  endISO?: string;
+  location?: string;
 }
 
 export function bookingConfirmationTemplate(business: Business, d: BookingEmailData): Omit<EmailMessage, "to"> {
@@ -126,9 +156,45 @@ export function contactNotificationTemplate(
   return { subject, html, text };
 }
 
+/** The mailto address used as the calendar invite ORGANIZER. */
+function organizerEmail(): string {
+  const raw = process.env.CLINIC_EMAIL || process.env.EMAIL_FROM || "appointments@paws-and-care.example";
+  const match = raw.match(/<([^>]+)>/);
+  return match ? match[1] : raw;
+}
+
+/** Build a .ics invite for a confirmed booking, or null if we lack the times. */
+export function buildBookingInvite(
+  business: Business,
+  to: string,
+  data: BookingEmailData,
+): EmailAttachment | null {
+  if (!data.startISO || !data.endISO) return null;
+  const ics = buildICS({
+    uid: `appt-${data.appointmentId ?? data.startISO}@${business.slug}`,
+    summary: `${data.service}${data.petName ? ` for ${data.petName}` : ""} — ${business.name}`,
+    startISO: data.startISO,
+    endISO: data.endISO,
+    description: `Your ${data.service} with ${data.withName} at ${business.name}.`,
+    location: data.location || business.name,
+    organizerEmail: organizerEmail(),
+    organizerName: business.name,
+    attendeeEmail: to,
+    attendeeName: data.clientName,
+    method: "REQUEST",
+    status: "CONFIRMED",
+    sequence: 0,
+  });
+  return {
+    filename: "invite.ics",
+    content: Buffer.from(ics, "utf8").toString("base64"),
+    contentType: "text/calendar; method=REQUEST",
+  };
+}
+
 // ── Best-effort senders (never throw into the caller) ───────────────────────
 
-/** Send a booking confirmation if we have an address. Best-effort. */
+/** Send a booking confirmation (with a calendar invite) if we have an address. Best-effort. */
 export async function notifyBookingConfirmed(
   business: Business,
   to: string | undefined | null,
@@ -136,7 +202,12 @@ export async function notifyBookingConfirmed(
 ): Promise<void> {
   if (!to) return;
   try {
-    await sendEmail({ to, ...bookingConfirmationTemplate(business, data) });
+    const invite = buildBookingInvite(business, to, data);
+    await sendEmail({
+      to,
+      ...bookingConfirmationTemplate(business, data),
+      ...(invite ? { attachments: [invite] } : {}),
+    });
   } catch (err) {
     console.error("booking confirmation email failed", err);
   }
