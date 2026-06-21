@@ -11,6 +11,7 @@ import {
   type VoiceProvider,
 } from "@/lib/voice";
 import { detectLanguage, t, toBCP47 } from "@/lib/lang";
+import { apiUrl } from "@/lib/api-url";
 
 type ServiceCard = { name: string; price: string | null; durationMin: number; description: string | null };
 type Slot = { iso: string; label: string; with: string };
@@ -35,7 +36,7 @@ interface BizMeta {
   emergencyLine?: string;
 }
 
-export default function ChatWidget() {
+export default function ChatWidget({ slug }: { slug?: string }) {
   const [biz, setBiz] = useState<BizMeta | null>(null);
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
@@ -58,13 +59,13 @@ export default function ChatWidget() {
   const accent = biz?.branding.accent ?? "#E8B04B";
 
   useEffect(() => {
-    fetch("/api/business")
+    fetch(apiUrl("/api/business", slug))
       .then((r) => r.json())
       .then(({ data }: { data: BizMeta }) => {
         setBiz(data);
         const fresh = `Hi there — I'm ${data.assistantName} at ${data.name}. ${data.tagline ?? ""} How can I help you and your ${data.clientNoun?.singular ?? "pet"} today?`;
         // Returning-client recognition (signed cookie set on a prior booking).
-        fetch("/api/client/me", { cache: "no-store" })
+        fetch(apiUrl("/api/client/me", slug), { cache: "no-store" })
           .then((r) => r.json())
           .then(({ data: me }) => {
             if (me?.returning) {
@@ -83,7 +84,7 @@ export default function ChatWidget() {
           .catch(() => setMessages([{ role: "assistant", content: fresh }]));
       })
       .catch(() => {});
-  }, []);
+  }, [slug]);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
@@ -113,7 +114,7 @@ export default function ChatWidget() {
       setInput("");
       setSending(true);
       try {
-        const res = await fetch("/api/chat", {
+        const res = await fetch(apiUrl("/api/chat", slug), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ messages: next.map((m) => ({ role: m.role, content: m.content })) }),
@@ -129,7 +130,7 @@ export default function ChatWidget() {
         setSending(false);
       }
     },
-    [messages, sending, say],
+    [messages, sending, say, slug],
   );
 
   const toggleMic = useCallback(() => {
@@ -159,7 +160,7 @@ export default function ChatWidget() {
 
   const submitBooking = useCallback(
     async (form: { clientName: string; phone: string; email?: string; petName?: string; serviceName: string; startISO: string }) => {
-      const res = await fetch("/api/bookings", {
+      const res = await fetch(apiUrl("/api/bookings", slug), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(form),
@@ -185,7 +186,7 @@ export default function ChatWidget() {
         setBooking(null);
       }
     },
-    [say],
+    [say, slug],
   );
 
   if (!biz) {
