@@ -3,6 +3,7 @@ import {
   AvailabilityRule,
   Appointment,
   Business,
+  BusinessGraphInput,
   Client,
   ConflictError,
   KnowledgeEntry,
@@ -117,7 +118,7 @@ function seed() {
 }
 
 export class MemoryRepo implements Repo {
-  private business: Business;
+  private businesses: Business[];
   private services: Service[];
   private resources: Resource[];
   private rules: AvailabilityRule[];
@@ -127,7 +128,7 @@ export class MemoryRepo implements Repo {
 
   constructor() {
     const s = seed();
-    this.business = s.business;
+    this.businesses = [s.business];
     this.services = s.services;
     this.resources = s.resources;
     this.rules = s.rules;
@@ -135,7 +136,84 @@ export class MemoryRepo implements Repo {
   }
 
   async getBusinessBySlug(slug: string) {
-    return this.business.slug === slug ? this.business : null;
+    return this.businesses.find((b) => b.slug === slug) ?? null;
+  }
+
+  async getBusinessById(id: string) {
+    return this.businesses.find((b) => b.id === id) ?? null;
+  }
+
+  async listBusinesses() {
+    return [...this.businesses];
+  }
+
+  async createBusinessGraph(input: BusinessGraphInput): Promise<Business> {
+    if (this.businesses.some((b) => b.slug === input.slug)) {
+      throw new ConflictError(`A clinic with slug "${input.slug}" already exists.`);
+    }
+    const business: Business = {
+      id: randomUUID(),
+      slug: input.slug,
+      name: input.name,
+      vertical: input.vertical,
+      config: input.config,
+    };
+    this.businesses.push(business);
+    for (const s of input.services) {
+      this.services.push({
+        id: randomUUID(),
+        businessId: business.id,
+        name: s.name,
+        durationMin: s.durationMin,
+        priceCents: s.priceCents ?? null,
+        description: s.description ?? null,
+      });
+    }
+    for (const r of input.resources) {
+      const resource: Resource = {
+        id: randomUUID(),
+        businessId: business.id,
+        name: r.name,
+        role: r.role ?? null,
+        googleCalId: r.googleCalId ?? null,
+      };
+      this.resources.push(resource);
+      for (const a of r.availability) {
+        this.rules.push({ id: randomUUID(), resourceId: resource.id, weekday: a.weekday, startMin: a.startMin, endMin: a.endMin });
+      }
+    }
+    for (const k of input.knowledge) {
+      this.knowledge.push({
+        id: randomUUID(),
+        businessId: business.id,
+        kind: k.kind,
+        title: k.title,
+        body: k.body,
+        metadata: k.metadata ?? null,
+      });
+    }
+    return business;
+  }
+
+  async updateBusiness(
+    id: string,
+    patch: Partial<Pick<Business, "name" | "vertical" | "config">>,
+  ): Promise<Business> {
+    const business = this.businesses.find((b) => b.id === id);
+    if (!business) throw new Error("Business not found");
+    Object.assign(business, patch);
+    return business;
+  }
+
+  async deleteBusiness(id: string): Promise<void> {
+    const resourceIds = new Set(this.resources.filter((r) => r.businessId === id).map((r) => r.id));
+    this.businesses = this.businesses.filter((b) => b.id !== id);
+    this.services = this.services.filter((s) => s.businessId !== id);
+    this.resources = this.resources.filter((r) => r.businessId !== id);
+    this.rules = this.rules.filter((r) => !resourceIds.has(r.resourceId));
+    this.knowledge = this.knowledge.filter((k) => k.businessId !== id);
+    this.clients = this.clients.filter((c) => c.businessId !== id);
+    this.appointments = this.appointments.filter((a) => a.businessId !== id);
   }
 
   async listServices(businessId: string) {
