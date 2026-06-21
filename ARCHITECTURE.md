@@ -39,7 +39,8 @@ human-sounding persona.
 - **Hexagonal core:** the booking domain depends only on a `Repo` port, never on
   a framework or vendor, so business rules are pure and unit-tested.
 - **Multi-tenant from day one:** every record is scoped to a `Business`; the
-  active tenant is resolved by slug.
+  active tenant is resolved per request from the `/c/[slug]` path. An **operator
+  console** (`/operator`) onboards clinics self-service (see §10.1).
 
 **Capabilities:** conversational booking (book/reschedule/cancel, conflict-free),
 full brand concierge (location, hours, facilities, services, pricing, team),
@@ -59,7 +60,7 @@ Google Calendar sync (push events + free/busy).
 | Email | Resend (HTTP) with console-outbox fallback |
 | Calendar | Google Calendar (OAuth2 refresh-token) with keyless no-op fallback |
 | Validation | Zod on every API boundary |
-| Tests | Vitest (52 specs) |
+| Tests | Vitest (72 specs) |
 | Hosting | Vercel + managed Postgres (Neon/Supabase); Redis (future) |
 
 ## 3. System architecture
@@ -309,6 +310,38 @@ setup.
   (else `GOOGLE_CALENDAR_ID`, default `primary`). The staff dashboard shows a
   "Calendar sync on/off" badge via `GET /api/admin/calendar`.
 
+### 10.1 Multi-tenancy & operator console
+
+The platform is self-service: one operator onboards many clinics, each fully isolated.
+
+- **Tenant resolution (`lib/context.ts`).** `loadContext(slug?)` resolves the active
+  business per request from `?b=<slug>` (sent by the `/c/[slug]` pages via the
+  `apiUrl()` helper), falling back to `BUSINESS_SLUG`. No proxy/middleware — Next 16
+  renamed `middleware` to `proxy` and discourages it, and explicit slug-passing keeps
+  the zero-setup story intact.
+- **Routing.** `app/c/[slug]/` is the branded public site + `admin/` staff dashboard;
+  `app/operator/` is the console. The legacy `/admin` redirects to the default clinic.
+- **Provisioning (`lib/domain/provisioning.ts`).** `provisionBusiness(repo, input)`
+  hashes the staff password into the config, optionally synthesizes starter FAQ from
+  the contact/hours/services, and calls `repo.createBusinessGraph` — which the Prisma
+  repo runs in a single `$transaction` (atomic Business + Services + Resources +
+  AvailabilityRules + Knowledge; 409 on a duplicate slug).
+- **Operator API (`app/api/operator/*`).** `login`/`logout` (separate
+  `operator_session` cookie via `lib/operator-auth.ts`), and `businesses`
+  GET (list) / POST (provision) / `[id]` GET/PATCH/DELETE — all `isOperator`-guarded
+  and Zod-validated (`lib/operator-input.ts`).
+- **Per-clinic staff auth.** The admin session cookie is **bound to a `businessId`**
+  (`businessId.hmac(...)`), so a session for clinic A can't authorize clinic B; the
+  password is the clinic's own scrypt hash in `config.staffAuth` (legacy global
+  `ADMIN_PASSWORD` is a fallback only when a clinic has none). The hash is never
+  exposed by the public `/api/business` meta.
+- **Configurable wording (`lib/vertical.ts`).** A per-clinic `clientNoun`
+  (pet/patient/client/customer, defaulting by vertical) threads through the system
+  prompt, fallback greeting, widget, and contact form; the "no medical advice"
+  disclaimer is gated to medical verticals.
+- **Persistence.** Real onboarding requires Postgres (`PrismaRepo`); the in-memory
+  repo supports it too but resets per process/instance — demo only.
+
 ## 11. Security architecture
 
 - **Staff auth** (`lib/admin-auth.ts`) — shared password gate; httpOnly +
@@ -340,7 +373,8 @@ noted; unset integrations fall back safely.
 
 | Var | Effect |
 |---|---|
-| `BUSINESS_SLUG` | active tenant (default `paws-and-care`) |
+| `BUSINESS_SLUG` | fallback tenant when no `?b=` (default `paws-and-care`) |
+| `OPERATOR_SECRET` / `OPERATOR_PASSWORD` | **required in production** for the operator console |
 | `ANTHROPIC_API_KEY` / `CLAUDE_MODEL` | enables Claude (else keyless fallback) |
 | `DATABASE_URL` | enables Postgres (else in-memory) |
 | `ELEVENLABS_API_KEY` / `_VOICE_ID` / `_MODEL` | production voice (else Web Speech) |
@@ -360,7 +394,7 @@ noted; unset integrations fall back safely.
 
 ## 14. Testing
 
-52 Vitest specs (`npm test`), no external services required:
+72 Vitest specs (`npm test`), no external services required:
 
 - **Domain** — availability derivation, conflict-free booking, **concurrency**
   double-booking, reschedule/cancel.
@@ -373,16 +407,21 @@ noted; unset integrations fall back safely.
   fallback, and free/busy folding into the offered slots.
 - **`.ics` invites** — UTC stamps, escaping, line folding, CRLF, cancellations,
   and the confirmation-email attachment.
-- **Security** — rate limiter, admin auth, fail-closed secrets.
+- **Security** — rate limiter, admin auth (incl. cross-tenant isolation),
+  operator auth, fail-closed secrets, scrypt staff hashing.
+- **Multi-tenancy** — provisioning (entities + tenant scoping + autoFaq + duplicate
+  slug), `clientNoun` in the prompt, and tenant resolution (slug override/fallback).
 
 Plus lint (`eslint`) and a production `next build` typecheck gate on every change.
 
 ## 15. Extensibility & roadmap
 
-- **New tenant/vertical:** add a `Business` row with its config, services, hours,
-  staff, and knowledge — no code change. Per-vertical fields go in `Json`.
+- **New clinic:** onboard via the operator console (`/operator`) — no code change;
+  or add a `Business` row directly. Per-vertical fields go in `Json`.
 - **Embeddable widget:** the chat widget is self-contained and brand-themed for
   multi-site embedding (a fast-follow once `frame-ancestors` is relaxed per host).
+- **Operator console** edits clinic identity/config today; per-child (services/team/
+  knowledge) editing and multi-operator accounts (Auth.js) are fast-follows.
 - **Google Calendar sync** is implemented (push/reschedule/cancel events +
   free/busy in the offered slots; see §10). Two-way sync (a push-notification
   channel that ingests externally-created events) is the natural next step.
@@ -395,23 +434,26 @@ Plus lint (`eslint`) and a production `next build` typecheck gate on every chang
 ```
 apps/assistant/
 ├── app/
-│   ├── page.tsx · about/ · contact/ · admin/      # pages
-│   ├── components/ChatWidget · SiteNav · ThemeToggle · ContactForm
+│   ├── page.tsx · about/ · contact/ · admin/      # platform pages (admin → redirect)
+│   ├── c/[slug]/{page,admin/page}.tsx              # per-clinic site + staff dashboard
+│   ├── operator/page.tsx                           # operator onboarding console
+│   ├── components/ChatWidget · SiteNav · ThemeToggle · ContactForm · AdminDashboard · OperatorConsole
 │   ├── api/                                        # route handlers
 │   │   ├── business · chat · availability · bookings · client/me
 │   │   ├── contact · tts · cron/reminders
-│   │   └── admin/{login,logout,bookings,bookings/[id],calendar}
+│   │   ├── admin/{login,logout,bookings,bookings/[id],calendar}
+│   │   └── operator/{login,logout,businesses,businesses/[id]}
 │   ├── layout.tsx · globals.css                    # theming
 ├── lib/
 │   ├── types.ts                                    # domain types + Repo port
-│   ├── domain/{availability,booking,client-context,time}.ts
-│   ├── repo/{index,memory,prisma}.ts               # persistence
+│   ├── domain/{availability,booking,client-context,provisioning,time}.ts
+│   ├── repo/{index,memory,prisma}.ts               # persistence (multi-tenant)
 │   ├── ai/{concierge,tools,prompt,fallback,types}.ts
 │   ├── calendar/{index,google}.ts                  # Google Calendar sync + free/busy
 │   ├── voice/{index,webspeech,elevenlabs,elevenlabs-server}.ts
-│   ├── email.ts · ics.ts · lang.ts                 # notifications + .ics invites + i18n
-│   ├── admin-auth.ts · client-session.ts · secret.ts · rate-limit.ts
-│   └── context.ts · prisma.ts
+│   ├── email.ts · ics.ts · lang.ts · vertical.ts   # notifications + .ics + i18n + client-noun
+│   ├── admin-auth.ts · operator-auth.ts · client-session.ts · secret.ts · rate-limit.ts
+│   └── context.ts · prisma.ts · api-url.ts · operator-input.ts
 ├── prisma/{schema.prisma,constraints.sql,seed.ts}
 └── next.config.ts · .env.example · README.md · ARCHITECTURE.md
 ```
