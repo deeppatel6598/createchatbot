@@ -7,7 +7,7 @@ type State = "idle" | "sending" | "sent" | "error";
 const field =
   "h-11 w-full rounded-xl border border-input bg-background px-3 text-sm text-foreground outline-none transition placeholder:text-muted-foreground focus:border-primary focus:ring-2 focus:ring-ring/40";
 
-export function ContactForm() {
+export function ContactForm({ clientNoun = "pet" }: { clientNoun?: string }) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [message, setMessage] = useState("");
@@ -68,7 +68,7 @@ export function ContactForm() {
       </div>
       <div>
         <label htmlFor="c-message" className="mb-1 block text-sm font-medium text-card-foreground">Message</label>
-        <textarea id="c-message" value={message} onChange={(e) => setMessage(e.target.value)} rows={5} className={`${field} h-auto py-2`} placeholder="How can we help you and your pet?" />
+        <textarea id="c-message" value={message} onChange={(e) => setMessage(e.target.value)} rows={5} className={`${field} h-auto py-2`} placeholder={`How can we help you and your ${clientNoun}?`} />
       </div>
       {state === "error" && <p className="text-sm text-danger">{error}</p>}
       <button

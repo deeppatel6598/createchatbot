@@ -57,7 +57,7 @@ type Phrase =
 
 const DICT: Record<Lang, Record<Phrase, string>> = {
   en: {
-    greetingNew: "Hi there — I'm {assistant} at {business}. How can I help you and your pet today?",
+    greetingNew: "Hi there — I'm {assistant} at {business}. How can I help you and your {noun} today?",
     greetingReturning: "Welcome back, {first}! {petQ}What can I help you with today?",
     petQ: "How's {pet}? ",
     slotsLead: "Lovely — here are the next open times for a {service}. Which one suits you best?",
@@ -70,7 +70,7 @@ const DICT: Record<Lang, Record<Phrase, string>> = {
     booked: "Wonderful — you're all set, {first}. I've booked {service} for {when} with {withName}. We'll send a confirmation email shortly.",
   },
   es: {
-    greetingNew: "¡Hola! Soy {assistant} de {business}. ¿Cómo puedo ayudarte a ti y a tu mascota hoy?",
+    greetingNew: "¡Hola! Soy {assistant} de {business}. ¿Cómo puedo ayudarte a ti y a tu {noun} hoy?",
     greetingReturning: "¡Bienvenida de nuevo, {first}! {petQ}¿En qué puedo ayudarte hoy?",
     petQ: "¿Cómo está {pet}? ",
     slotsLead: "Perfecto — estos son los próximos horarios disponibles para {service}. ¿Cuál te viene mejor?",
@@ -83,7 +83,7 @@ const DICT: Record<Lang, Record<Phrase, string>> = {
     booked: "¡Perfecto, {first}, todo listo! He reservado {service} para el {when} con {withName}. Te enviaremos un correo de confirmación en breve.",
   },
   fr: {
-    greetingNew: "Bonjour ! Je suis {assistant} de {business}. Comment puis-je vous aider, vous et votre animal, aujourd'hui ?",
+    greetingNew: "Bonjour ! Je suis {assistant} de {business}. Comment puis-je vous aider, vous et votre {noun}, aujourd'hui ?",
     greetingReturning: "Ravie de vous revoir, {first} ! {petQ}Comment puis-je vous aider aujourd'hui ?",
     petQ: "Comment va {pet} ? ",
     slotsLead: "Parfait — voici les prochains créneaux disponibles pour {service}. Lequel vous convient le mieux ?",
@@ -96,7 +96,7 @@ const DICT: Record<Lang, Record<Phrase, string>> = {
     booked: "Parfait, {first}, c'est réservé ! J'ai noté {service} le {when} avec {withName}. Vous recevrez un e-mail de confirmation très bientôt.",
   },
   de: {
-    greetingNew: "Hallo! Ich bin {assistant} von {business}. Wie kann ich Ihnen und Ihrem Tier heute helfen?",
+    greetingNew: "Hallo! Ich bin {assistant} von {business}. Wie kann ich Ihnen und Ihrem {noun} heute helfen?",
     greetingReturning: "Schön, Sie wiederzusehen, {first}! {petQ}Wie kann ich Ihnen heute helfen?",
     petQ: "Wie geht es {pet}? ",
     slotsLead: "Wunderbar — hier sind die nächsten freien Termine für {service}. Welcher passt Ihnen am besten?",
@@ -109,7 +109,7 @@ const DICT: Record<Lang, Record<Phrase, string>> = {
     booked: "Wunderbar, {first}, alles erledigt! Ich habe {service} am {when} bei {withName} gebucht. Sie erhalten in Kürze eine Bestätigungs-E-Mail.",
   },
   pt: {
-    greetingNew: "Olá! Sou {assistant} da {business}. Como posso ajudar você e o seu pet hoje?",
+    greetingNew: "Olá! Sou {assistant} da {business}. Como posso ajudar você e o seu {noun} hoje?",
     greetingReturning: "Que bom te ver de novo, {first}! {petQ}Como posso ajudar hoje?",
     petQ: "Como está {pet}? ",
     slotsLead: "Ótimo — aqui estão os próximos horários disponíveis para {service}. Qual fica melhor para você?",
@@ -122,7 +122,7 @@ const DICT: Record<Lang, Record<Phrase, string>> = {
     booked: "Perfeito, {first}, tudo certo! Agendei {service} para {when} com {withName}. Enviaremos um e-mail de confirmação em breve.",
   },
   hi: {
-    greetingNew: "नमस्ते! मैं {business} की {assistant} हूँ। आज मैं आपकी और आपके पालतू की कैसे मदद कर सकती हूँ?",
+    greetingNew: "नमस्ते! मैं {business} की {assistant} हूँ। आज मैं आपकी और आपके {noun} की कैसे मदद कर सकती हूँ?",
     greetingReturning: "आपको फिर से देखकर अच्छा लगा, {first}! {petQ}आज मैं आपकी कैसे मदद करूँ?",
     petQ: "{pet} कैसा है? ",
     slotsLead: "बढ़िया — {service} के लिए ये अगले उपलब्ध समय हैं। आपको कौन-सा ठीक रहेगा?",

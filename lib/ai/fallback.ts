@@ -4,6 +4,7 @@ import { loadClientContext } from "@/lib/domain/client-context";
 import { dispatchTool } from "./tools";
 import type { ConciergeResult, ConciergeUI } from "./types";
 import { detectLanguage, t } from "@/lib/lang";
+import { resolveClientNoun } from "@/lib/vertical";
 
 /**
  * Keyless fallback concierge — runs when ANTHROPIC_API_KEY is not set so the
@@ -68,7 +69,7 @@ export async function runFallback(
   if (!text || (text.length < 30 && GREETINGS.some((g) => text.startsWith(g)))) {
     const reply = client
       ? t(lang, "greetingReturning", { first: firstName, petQ: petName ? t(lang, "petQ", { pet: petName }) : "" })
-      : t(lang, "greetingNew", { assistant: c.assistantName, business: business.name });
+      : t(lang, "greetingNew", { assistant: c.assistantName, business: business.name, noun: resolveClientNoun(business).singular });
     return { reply, usedClaude: false };
   }
 

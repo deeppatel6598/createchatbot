@@ -27,6 +27,7 @@ interface BizMeta {
   assistantName: string;
   tagline?: string;
   branding: { primary: string; accent: string; bubbleEmoji?: string };
+  clientNoun?: { singular: string; plural: string };
   persona: PersonaTTS & { displayName: string };
   voiceProvider: VoiceProvider;
   services: ServiceCard[];
@@ -61,7 +62,7 @@ export default function ChatWidget() {
       .then((r) => r.json())
       .then(({ data }: { data: BizMeta }) => {
         setBiz(data);
-        const fresh = `Hi there — I'm ${data.assistantName} at ${data.name}. ${data.tagline ?? ""} How can I help you and your pet today?`;
+        const fresh = `Hi there — I'm ${data.assistantName} at ${data.name}. ${data.tagline ?? ""} How can I help you and your ${data.clientNoun?.singular ?? "pet"} today?`;
         // Returning-client recognition (signed cookie set on a prior booking).
         fetch("/api/client/me", { cache: "no-store" })
           .then((r) => r.json())
@@ -290,6 +291,7 @@ export default function ChatWidget() {
           service={booking.service}
           startISO={booking.startISO}
           label={booking.label}
+          dependentNoun={biz.clientNoun?.singular ?? "pet"}
           defaultName={returning?.name ?? ""}
           defaultPhone={returning?.phone ?? ""}
           onCancel={() => setBooking(null)}
@@ -383,6 +385,7 @@ function BookingForm({
   service,
   startISO,
   label,
+  dependentNoun,
   defaultName,
   defaultPhone,
   onCancel,
@@ -392,11 +395,13 @@ function BookingForm({
   service: string;
   startISO: string;
   label: string;
+  dependentNoun: string;
   defaultName: string;
   defaultPhone: string;
   onCancel: () => void;
   onSubmit: (form: { clientName: string; phone: string; email?: string; petName?: string; serviceName: string; startISO: string }) => Promise<void>;
 }) {
+  const dependentLabel = `${dependentNoun.charAt(0).toUpperCase()}${dependentNoun.slice(1)}'s name (optional)`;
   const [clientName, setClientName] = useState(defaultName);
   const [phone, setPhone] = useState(defaultPhone);
   const [email, setEmail] = useState("");
@@ -413,7 +418,7 @@ function BookingForm({
           <input value={clientName} onChange={(e) => setClientName(e.target.value)} placeholder="Your name" aria-label="Your name" className="h-10 w-full rounded-xl border border-input bg-background px-3 text-sm text-foreground outline-none placeholder:text-muted-foreground focus:border-[var(--brand)]" />
           <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Phone number" inputMode="tel" aria-label="Phone number" className="h-10 w-full rounded-xl border border-input bg-background px-3 text-sm text-foreground outline-none placeholder:text-muted-foreground focus:border-[var(--brand)]" />
           <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email (optional — for confirmation)" type="email" inputMode="email" aria-label="Email" className="h-10 w-full rounded-xl border border-input bg-background px-3 text-sm text-foreground outline-none placeholder:text-muted-foreground focus:border-[var(--brand)]" />
-          <input value={petName} onChange={(e) => setPetName(e.target.value)} placeholder="Pet's name (optional)" aria-label="Pet's name" className="h-10 w-full rounded-xl border border-input bg-background px-3 text-sm text-foreground outline-none placeholder:text-muted-foreground focus:border-[var(--brand)]" />
+          <input value={petName} onChange={(e) => setPetName(e.target.value)} placeholder={dependentLabel} aria-label={dependentLabel} className="h-10 w-full rounded-xl border border-input bg-background px-3 text-sm text-foreground outline-none placeholder:text-muted-foreground focus:border-[var(--brand)]" />
         </div>
         <div className="mt-3 flex gap-2">
           <button onClick={onCancel} className="h-10 flex-1 rounded-xl border border-border text-sm text-foreground transition active:scale-95">

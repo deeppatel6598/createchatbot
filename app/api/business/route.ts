@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { loadContext } from "@/lib/context";
 import { elevenLabsConfigured } from "@/lib/voice/elevenlabs-server";
+import { resolveClientNoun } from "@/lib/vertical";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -17,6 +18,7 @@ export async function GET() {
       assistantName: c.assistantName,
       tagline: c.tagline,
       branding: c.branding,
+      clientNoun: resolveClientNoun(business),
       persona: c.voice,
       voiceProvider: elevenLabsConfigured() ? "elevenlabs" : "webspeech",
       hoursText: c.hoursText,
