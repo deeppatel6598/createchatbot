@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { loadContext } from "@/lib/context";
+import { loadContext, slugFromRequest } from "@/lib/context";
 import { dispatchTool } from "@/lib/ai/tools";
 
 export const runtime = "nodejs";
@@ -13,7 +13,7 @@ export async function GET(req: NextRequest) {
   if (!service) {
     return NextResponse.json({ error: { code: "validation_error", message: "service is required" } }, { status: 422 });
   }
-  const { repo, business } = await loadContext();
+  const { repo, business } = await loadContext(slugFromRequest(req));
   const result = await dispatchTool(repo, business, "check_availability", { service_name: service, days });
   return NextResponse.json({ data: result.data ?? { service, slots: [] } });
 }

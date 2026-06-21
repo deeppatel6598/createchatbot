@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { loadContext } from "@/lib/context";
+import { getRepo } from "@/lib/repo";
 import { formatDateTime } from "@/lib/domain/time";
 import { reminderTemplate, sendEmail } from "@/lib/email";
-import type { Pet } from "@/lib/types";
+import type { Business, Pet, Repo } from "@/lib/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -25,11 +25,26 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: { code: "unauthorized", message: "Bad cron secret" } }, { status: 401 });
   }
 
-  const { repo, business } = await loadContext();
+  const repo = getRepo();
   const now = Date.now();
   const windowStart = new Date(now + 23 * 60 * 60 * 1000).toISOString();
   const windowEnd = new Date(now + 25 * 60 * 60 * 1000).toISOString();
 
+  // One cron run covers every tenant.
+  let sent = 0;
+  for (const business of await repo.listBusinesses()) {
+    sent += await remindBusiness(repo, business, now, windowStart, windowEnd);
+  }
+  return NextResponse.json({ data: { reminded: sent } });
+}
+
+async function remindBusiness(
+  repo: Repo,
+  business: Business,
+  now: number,
+  windowStart: string,
+  windowEnd: string,
+): Promise<number> {
   const [appts, services, resources, clients] = await Promise.all([
     repo.listAppointments(business.id, { fromISO: new Date(now).toISOString() }),
     repo.listServices(business.id),
@@ -62,6 +77,5 @@ export async function GET(req: NextRequest) {
     reminded.add(a.id);
     sent += 1;
   }
-
-  return NextResponse.json({ data: { reminded: sent } });
+  return sent;
 }

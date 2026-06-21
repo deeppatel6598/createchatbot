@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { loadContext } from "@/lib/context";
+import { loadContext, slugFromRequest } from "@/lib/context";
 import { bookAppointment } from "@/lib/domain/booking";
 import { formatDateTime } from "@/lib/domain/time";
 import { ConflictError, NotFoundError } from "@/lib/types";
@@ -43,7 +43,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const { repo, business } = await loadContext();
+  const { repo, business } = await loadContext(slugFromRequest(req));
   const b = parsed.data;
   try {
     const result = await bookAppointment(repo, business, {

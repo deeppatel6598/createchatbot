@@ -1,5 +1,5 @@
-import { NextResponse } from "next/server";
-import { loadContext } from "@/lib/context";
+import { NextRequest, NextResponse } from "next/server";
+import { loadContext, slugFromRequest } from "@/lib/context";
 import { elevenLabsConfigured } from "@/lib/voice/elevenlabs-server";
 import { resolveClientNoun } from "@/lib/vertical";
 
@@ -7,8 +7,8 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /** GET /api/business — public meta the widget needs to render + speak. */
-export async function GET() {
-  const { repo, business } = await loadContext();
+export async function GET(req: NextRequest) {
+  const { repo, business } = await loadContext(slugFromRequest(req));
   const services = await repo.listServices(business.id);
   const c = business.config;
   return NextResponse.json({

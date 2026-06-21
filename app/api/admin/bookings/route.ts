@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isAuthed } from "@/lib/admin-auth";
-import { loadContext } from "@/lib/context";
+import { loadContext, slugFromRequest } from "@/lib/context";
 import { formatDateTime } from "@/lib/domain/time";
 import type { Pet } from "@/lib/types";
 
@@ -9,11 +9,15 @@ export const dynamic = "force-dynamic";
 
 /** GET /api/admin/bookings — upcoming appointments as a staff-friendly view. */
 export async function GET(req: NextRequest) {
-  if (!isAuthed(req)) {
+  const ctx = await loadContext(slugFromRequest(req)).catch(() => null);
+  if (!ctx) {
+    return NextResponse.json({ error: { code: "not_found", message: "Unknown clinic" } }, { status: 404 });
+  }
+  const { repo, business } = ctx;
+  if (!isAuthed(req, business.id)) {
     return NextResponse.json({ error: { code: "unauthorized", message: "Sign in" } }, { status: 401 });
   }
 
-  const { repo, business } = await loadContext();
   const startOfToday = new Date();
   startOfToday.setHours(0, 0, 0, 0);
 
