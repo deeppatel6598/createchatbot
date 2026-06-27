@@ -19,6 +19,7 @@ export interface SpeakOpts {
   persona: PersonaTTS;
   lang: string;
   provider: VoiceProvider;
+  voiceId?: string;
   onStart?: () => void;
   onEnd?: () => void;
 }
@@ -29,7 +30,7 @@ export async function speakReply(text: string, opts: SpeakOpts): Promise<void> {
   stopAllSpeech(); // barge-in
   if (opts.provider === "elevenlabs") {
     try {
-      await speakElevenLabs(text, { onStart: opts.onStart, onEnd: opts.onEnd });
+      await speakElevenLabs(text, { voiceId: opts.voiceId, onStart: opts.onStart, onEnd: opts.onEnd });
       return;
     } catch {
       // fall through to Web Speech

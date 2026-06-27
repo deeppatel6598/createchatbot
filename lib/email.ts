@@ -36,7 +36,7 @@ export function emailConfigured(): boolean {
 
 export async function sendEmail(msg: EmailMessage): Promise<EmailResult> {
   const key = process.env.RESEND_API_KEY;
-  const from = process.env.EMAIL_FROM || "Paws & Care <onboarding@resend.dev>";
+  const from = process.env.EMAIL_FROM || "Sofia Concierge <onboarding@resend.dev>";
 
   if (!key) {
     const attach = msg.attachments?.length ? ` attachments=${msg.attachments.map((a) => a.filename).join(",")}` : "";
@@ -129,7 +129,7 @@ export function reminderTemplate(business: Business, d: BookingEmailData): Omit<
   const subject = `Reminder: your ${d.service} tomorrow — ${business.name}`;
   const html = shell(
     business,
-    "A friendly reminder 🐾",
+    `A friendly reminder ${business.config.branding.bubbleEmoji ?? "✨"}`,
     `<p style="margin:0 0 12px">Hi ${esc(first)}, just a gentle reminder${d.petName ? ` about ${esc(d.petName)}'s visit` : ""}:</p>
      <p style="font-size:14px"><strong>${esc(d.service)}</strong> — ${esc(d.when)} with ${esc(d.withName)}.</p>
      <p style="margin:16px 0 0;color:#666;font-size:13px">Need to change it? Just reply or call us.</p>`,
@@ -157,8 +157,8 @@ export function contactNotificationTemplate(
 }
 
 /** The mailto address used as the calendar invite ORGANIZER. */
-function organizerEmail(): string {
-  const raw = process.env.CLINIC_EMAIL || process.env.EMAIL_FROM || "appointments@paws-and-care.example";
+function organizerEmail(business: Business): string {
+  const raw = business.config.contactEmail || process.env.CLINIC_EMAIL || process.env.EMAIL_FROM || "appointments@example.com";
   const match = raw.match(/<([^>]+)>/);
   return match ? match[1] : raw;
 }
@@ -177,7 +177,7 @@ export function buildBookingInvite(
     endISO: data.endISO,
     description: `Your ${data.service} with ${data.withName} at ${business.name}.`,
     location: data.location || business.name,
-    organizerEmail: organizerEmail(),
+    organizerEmail: organizerEmail(business),
     organizerName: business.name,
     attendeeEmail: to,
     attendeeName: data.clientName,

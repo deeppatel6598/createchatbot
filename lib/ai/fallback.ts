@@ -4,7 +4,7 @@ import { loadClientContext } from "@/lib/domain/client-context";
 import { dispatchTool } from "./tools";
 import type { ConciergeResult, ConciergeUI } from "./types";
 import { detectLanguage, t } from "@/lib/lang";
-import { resolveClientNoun } from "@/lib/vertical";
+import { isMedicalVertical, resolveClientNoun } from "@/lib/vertical";
 
 /**
  * Keyless fallback concierge — runs when ANTHROPIC_API_KEY is not set so the
@@ -34,12 +34,15 @@ export async function runFallback(
   const firstName = client?.name?.split(" ")[0];
   const petName = client?.pets?.[0]?.name;
 
-  // Safety first, across languages: if a pet may have ingested something or shows
-  // alarming symptoms, never advise — reassure + emergency line (localized).
-  const DANGER =
-    /(\bate\b|eaten|swallow|ingest|poison|toxic|vomit|seizure|bleeding|\bblood\b|collaps|emergency|chok|comi[oó]|trag[oó]|veneno|t[oó]xic|v[oó]mito|sangr|convuls|emergencia|mang[eé]|aval[eé]|\bvomi\b|urgence|gefressen|verschluckt|vergiftet|giftig|erbroch|erbrich|\bblut\b|notfall|krampf|खा लिया|खाया|निगल|ज़हर|उल्टी|खून|दौरा|आपातकाल)/i;
-  if (DANGER.test(lastUser)) {
-    return { reply: t(lang, "noAdvice", { emergency: c.emergencyLine ?? "" }), usedClaude: false };
+  // Safety first for health verticals: if symptoms suggest a medical emergency,
+  // never advise — reassure + emergency line (localized). Skipped for non-medical
+  // verticals (salon, generic) where "blood" or "ate" appear in normal conversation.
+  if (isMedicalVertical(business.vertical)) {
+    const DANGER =
+      /(\bate\b|eaten|swallow|ingest|poison|toxic|vomit|seizure|bleeding|\bblood\b|collaps|emergency|chok|comi[oó]|trag[oó]|veneno|t[oó]xic|v[oó]mito|sangr|convuls|emergencia|mang[eé]|aval[eé]|\bvomi\b|urgence|gefressen|verschluckt|vergiftet|giftig|erbroch|erbrich|\bblut\b|notfall|krampf|खा लिया|खाया|निगल|ज़हर|उल्टी|खून|दौरा|आपातकाल)/i;
+    if (DANGER.test(lastUser)) {
+      return { reply: t(lang, "noAdvice", { emergency: c.emergencyLine ?? "" }), usedClaude: false };
+    }
   }
 
   const serviceCards = services.map((s) => ({

@@ -9,9 +9,15 @@ type Bucket = { count: number; reset: number };
 const store = new Map<string, Bucket>();
 
 export function clientIp(req: NextRequest): string {
-  const xff = req.headers.get("x-forwarded-for");
-  if (xff) return xff.split(",")[0].trim();
-  return req.headers.get("x-real-ip") ?? "unknown";
+  // On Vercel, x-vercel-forwarded-for is set by the edge and cannot be spoofed.
+  // Fall back to x-real-ip (set by nginx/trusted proxies) then x-forwarded-for
+  // (only trusted when behind a known proxy; clients can spoof it directly).
+  return (
+    req.headers.get("x-vercel-forwarded-for") ??
+    req.headers.get("x-real-ip") ??
+    req.headers.get("x-forwarded-for")?.split(",")[0].trim() ??
+    "unknown"
+  );
 }
 
 /** Returns a 429 NextResponse if the caller is over the limit, else null. */

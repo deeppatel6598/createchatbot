@@ -58,14 +58,16 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     return NextResponse.json({ error: { code: "unauthorized", message: "Sign in" } }, { status: 401 });
   }
   const { id } = await params;
+  // Verify the appointment belongs to this tenant before mutating.
+  const all = await repo.listAppointments(business.id, { includeCancelled: true });
+  const existing = all.find((a) => a.id === id);
+  if (!existing) return NextResponse.json({ error: { code: "not_found", message: "Appointment not found" } }, { status: 404 });
+
   try {
-    // Load first so we have the synced event id to remove from the calendar.
-    const all = await repo.listAppointments(business.id, { includeCancelled: true });
-    const existing = all.find((a) => a.id === id);
     const cancelled = await repo.updateAppointment(id, { status: "CANCELLED" });
-    if (existing) await onBookingCancelled(repo, business, existing);
+    await onBookingCancelled(repo, business, existing);
     return NextResponse.json({ data: { id: cancelled.id, status: cancelled.status } });
   } catch {
-    return NextResponse.json({ error: { code: "not_found", message: "Appointment not found" } }, { status: 404 });
+    return NextResponse.json({ error: { code: "internal_error", message: "Could not cancel appointment." } }, { status: 500 });
   }
 }

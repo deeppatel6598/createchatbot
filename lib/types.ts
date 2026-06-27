@@ -37,6 +37,8 @@ export interface BrandConfig {
    * dental → patient, salon → client). When unset, a vertical default applies.
    */
   clientNoun?: { singular: string; plural: string };
+  /** Clinic inbox for contact form submissions and calendar invite ORGANIZER. */
+  contactEmail?: string;
   /**
    * Per-clinic staff password (scrypt hash). Set by the operator at onboarding.
    * NEVER serialized to the public /api/business meta.

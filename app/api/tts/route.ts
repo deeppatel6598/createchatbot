@@ -6,7 +6,7 @@ import { rateLimit } from "@/lib/rate-limit";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const Body = z.object({ text: z.string().min(1).max(2000) });
+const Body = z.object({ text: z.string().min(1).max(2000), voiceId: z.string().max(100).optional() });
 
 /**
  * POST /api/tts — synthesize speech via ElevenLabs and stream mp3 back.
@@ -32,7 +32,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const { url, headers, body } = buildElevenLabsRequest({ text: parsed.data.text });
+    const { url, headers, body } = buildElevenLabsRequest({ text: parsed.data.text, voiceId: parsed.data.voiceId });
     const upstream = await fetch(url, { method: "POST", headers, body });
     if (!upstream.ok || !upstream.body) {
       console.error("elevenlabs error", upstream.status, await upstream.text().catch(() => ""));

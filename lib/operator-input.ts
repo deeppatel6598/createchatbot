@@ -30,6 +30,7 @@ export const configSchema = z.object({
   hoursText: z.string().max(300).optional(),
   policies: z.array(z.string().max(500)).max(20).optional(),
   emergencyLine: z.string().max(60).optional(),
+  contactEmail: z.string().email().max(200).optional(),
   clientNoun: z.object({ singular: z.string().min(1).max(40), plural: z.string().min(1).max(40) }).optional(),
 });
 

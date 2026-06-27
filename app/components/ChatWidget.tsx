@@ -83,7 +83,9 @@ export default function ChatWidget({ slug }: { slug?: string }) {
           })
           .catch(() => setMessages([{ role: "assistant", content: fresh }]));
       })
-      .catch(() => {});
+      .catch(() => {
+        setMessages([{ role: "assistant", content: "I'm here to help — how can I assist you today?" }]);
+      });
   }, [slug]);
 
   useEffect(() => {
@@ -97,6 +99,7 @@ export default function ChatWidget({ slug }: { slug?: string }) {
         persona: biz.persona,
         lang: detectLanguage(text),
         provider: biz.voiceProvider,
+        voiceId: (biz.persona as { elevenLabsVoiceId?: string }).elevenLabsVoiceId,
         onStart: () => setSpeaking(true),
         onEnd: () => setSpeaking(false),
       });

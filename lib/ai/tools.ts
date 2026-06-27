@@ -1,4 +1,5 @@
 import type { BusyInterval, Business, KnowledgeKind, Repo } from "@/lib/types";
+import { resolveClientNoun } from "@/lib/vertical";
 import { ConflictError, NotFoundError } from "@/lib/types";
 import { getAvailableSlots } from "@/lib/domain/availability";
 import {
@@ -180,7 +181,7 @@ export async function dispatchTool(
             pets: ctx.pets,
             upcoming: ctx.upcoming ?? null,
           },
-          next_actions: ["Greet them warmly by name and ask after their pet."],
+          next_actions: [`Greet them warmly by name and ask after their ${resolveClientNoun(business).singular}.`],
         };
       }
 

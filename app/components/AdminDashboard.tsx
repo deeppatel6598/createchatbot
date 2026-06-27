@@ -37,22 +37,25 @@ export function AdminDashboard({ slug }: { slug?: string }) {
   }, [slug]);
 
   const loadCalendar = useCallback(async () => {
-    const res = await fetch(apiUrl("/api/admin/calendar", slug), { cache: "no-store" });
-    if (!res.ok) return;
-    const json = await res.json();
-    setCalendarOn(Boolean(json.data?.configured));
+    try {
+      const res = await fetch(apiUrl("/api/admin/calendar", slug), { cache: "no-store" });
+      if (!res.ok) return;
+      const json = await res.json().catch(() => null);
+      setCalendarOn(Boolean(json?.data?.configured));
+    } catch { /* calendar status is cosmetic; swallow */ }
   }, [slug]);
 
   const load = useCallback(async () => {
-    const res = await fetch(apiUrl("/api/admin/bookings", slug), { cache: "no-store" });
-    if (res.status === 401) {
+    try {
+      const res = await fetch(apiUrl("/api/admin/bookings", slug), { cache: "no-store" });
+      if (res.status === 401) { setStatus("login"); return; }
+      const json = await res.json().catch(() => ({ data: [] }));
+      setBookings(json.data ?? []);
+      setStatus("ready");
+      void loadCalendar();
+    } catch {
       setStatus("login");
-      return;
     }
-    const json = await res.json();
-    setBookings(json.data ?? []);
-    setStatus("ready");
-    void loadCalendar();
   }, [slug, loadCalendar]);
 
   useEffect(() => {
@@ -80,51 +83,65 @@ export function AdminDashboard({ slug }: { slug?: string }) {
   const login = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoginError("");
-    const res = await fetch(apiUrl("/api/admin/login", slug), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ password }),
-    });
-    if (res.ok) {
-      setPassword("");
-      setStatus("loading");
-      await load();
-    } else {
-      setLoginError("Incorrect password.");
+    try {
+      const res = await fetch(apiUrl("/api/admin/login", slug), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password }),
+      });
+      if (res.ok) {
+        setPassword("");
+        setStatus("loading");
+        await load();
+      } else {
+        setLoginError("Incorrect password.");
+      }
+    } catch {
+      setLoginError("Network error — please try again.");
     }
   };
 
   const logout = async () => {
-    await fetch(apiUrl("/api/admin/logout", slug), { method: "POST" });
+    try { await fetch(apiUrl("/api/admin/logout", slug), { method: "POST" }); } catch { /* best-effort */ }
     setBookings([]);
     setStatus("login");
   };
 
   const cancel = async (id: string) => {
     setBusyId(id);
-    await fetch(apiUrl(`/api/admin/bookings/${id}`, slug), { method: "DELETE" });
-    setBusyId(null);
-    await load();
+    try {
+      await fetch(apiUrl(`/api/admin/bookings/${id}`, slug), { method: "DELETE" });
+      await load();
+    } catch { /* best-effort — refresh will update status */ }
+    finally { setBusyId(null); }
   };
 
   const openReschedule = async (b: Booking) => {
     setReschedule({ id: b.id, service: b.service, slots: [] });
-    const res = await fetch(apiUrl(`/api/availability?service=${encodeURIComponent(b.service)}`, slug), { cache: "no-store" });
-    const json = await res.json();
-    setReschedule({ id: b.id, service: b.service, slots: json.data?.slots ?? [] });
+    try {
+      const res = await fetch(apiUrl(`/api/availability?service=${encodeURIComponent(b.service)}`, slug), { cache: "no-store" });
+      const json = await res.json().catch(() => null);
+      setReschedule({ id: b.id, service: b.service, slots: json?.data?.slots ?? [] });
+    } catch {
+      setReschedule({ id: b.id, service: b.service, slots: [] });
+    }
   };
 
   const doReschedule = async (id: string, iso: string) => {
     setBusyId(id);
-    const res = await fetch(apiUrl(`/api/admin/bookings/${id}`, slug), {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ newStartISO: iso }),
-    });
-    setBusyId(null);
-    setReschedule(null);
-    if (!res.ok) alert("That time was just taken — pick another.");
-    await load();
+    try {
+      const res = await fetch(apiUrl(`/api/admin/bookings/${id}`, slug), {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ newStartISO: iso }),
+      });
+      if (!res.ok) alert("That time was just taken — pick another.");
+      await load();
+    } catch { /* best-effort */ }
+    finally {
+      setBusyId(null);
+      setReschedule(null);
+    }
   };
 
   if (status === "loading") {
