@@ -1,12 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { loadContext, slugFromRequest } from "@/lib/context";
 import { dispatchTool } from "@/lib/ai/tools";
+import { rateLimit } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /** GET /api/availability?service=Wellness%20Exam&days=7 — real open slots. */
 export async function GET(req: NextRequest) {
+  const limited = rateLimit(req, { name: "availability", limit: 60, windowMs: 60_000 });
+  if (limited) return limited;
+
   const url = new URL(req.url);
   const service = url.searchParams.get("service") ?? "";
   const days = Number(url.searchParams.get("days")) || 7;
