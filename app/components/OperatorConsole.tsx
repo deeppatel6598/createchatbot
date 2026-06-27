@@ -73,17 +73,21 @@ export function OperatorConsole() {
   const login = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
-    const res = await fetch("/api/operator/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ password }),
-    });
-    if (res.ok) {
-      setPassword("");
-      setView("loading");
-      await load();
-    } else {
-      setError("Incorrect password.");
+    try {
+      const res = await fetch("/api/operator/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password }),
+      });
+      if (res.ok) {
+        setPassword("");
+        setView("loading");
+        await load();
+      } else {
+        setError("Incorrect password.");
+      }
+    } catch {
+      setError("Network error — please check your connection.");
     }
   };
 

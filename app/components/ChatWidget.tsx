@@ -83,7 +83,9 @@ export default function ChatWidget({ slug }: { slug?: string }) {
           })
           .catch(() => setMessages([{ role: "assistant", content: fresh }]));
       })
-      .catch(() => {});
+      .catch(() => {
+        setMessages([{ role: "assistant", content: "I'm here to help — how can I assist you today?" }]);
+      });
   }, [slug]);
 
   useEffect(() => {
