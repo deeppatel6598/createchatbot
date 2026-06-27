@@ -8,7 +8,9 @@ export const dynamic = "force-dynamic";
 
 /** GET /api/business — public meta the widget needs to render + speak. */
 export async function GET(req: NextRequest) {
-  const { repo, business } = await loadContext(slugFromRequest(req));
+  const ctx = await loadContext(slugFromRequest(req)).catch(() => null);
+  if (!ctx) return NextResponse.json({ error: { code: "not_found", message: "Unknown clinic" } }, { status: 404 });
+  const { repo, business } = ctx;
   const services = await repo.listServices(business.id);
   const c = business.config;
   return NextResponse.json({

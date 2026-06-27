@@ -43,7 +43,9 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const { repo, business } = await loadContext(slugFromRequest(req));
+  const ctx = await loadContext(slugFromRequest(req)).catch(() => null);
+  if (!ctx) return NextResponse.json({ error: { code: "not_found", message: "Unknown clinic" } }, { status: 404 });
+  const { repo, business } = ctx;
   const b = parsed.data;
   try {
     const result = await bookAppointment(repo, business, {

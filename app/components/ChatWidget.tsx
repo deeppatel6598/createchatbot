@@ -160,31 +160,34 @@ export default function ChatWidget({ slug }: { slug?: string }) {
 
   const submitBooking = useCallback(
     async (form: { clientName: string; phone: string; email?: string; petName?: string; serviceName: string; startISO: string }) => {
-      const res = await fetch(apiUrl("/api/bookings", slug), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
-      });
-      const json = await res.json();
-      if (res.ok) {
-        const d = json.data;
-        const confirm = t(langRef.current, "booked", {
-          first: form.clientName.split(" ")[0],
-          service: d.service,
-          when: d.when,
-          withName: d.with,
+      try {
+        const res = await fetch(apiUrl("/api/bookings", slug), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(form),
         });
-        setMessages((m) => [
-          ...m,
-          { role: "assistant", content: confirm, ui: { kind: "booked", service: d.service, when: d.when, with: d.with, price: d.price } },
-        ]);
-        say(confirm);
-        setBooking(null);
-      } else {
-        const msg = json?.error?.message ?? "That time was just taken.";
-        setMessages((m) => [...m, { role: "assistant", content: `Oh — ${msg} Shall we pick another time?` }]);
-        setBooking(null);
+        const json = await res.json();
+        if (res.ok) {
+          const d = json.data;
+          const confirm = t(langRef.current, "booked", {
+            first: form.clientName.split(" ")[0],
+            service: d.service,
+            when: d.when,
+            withName: d.with,
+          });
+          setMessages((m) => [
+            ...m,
+            { role: "assistant", content: confirm, ui: { kind: "booked", service: d.service, when: d.when, with: d.with, price: d.price } },
+          ]);
+          say(confirm);
+        } else {
+          const msg = json?.error?.message ?? "That time was just taken.";
+          setMessages((m) => [...m, { role: "assistant", content: `Oh — ${msg} Shall we pick another time?` }]);
+        }
+      } catch {
+        setMessages((m) => [...m, { role: "assistant", content: "I'm having trouble connecting. Please try again." }]);
       }
+      setBooking(null);
     },
     [say, slug],
   );

@@ -215,6 +215,7 @@ function NewClinicForm({ onCreated }: { onCreated: () => void }) {
   const submit = async () => {
     setError("");
     setBusy(true);
+    try {
     const payload = {
       identity: { name: name.trim(), slug: slug.trim(), vertical },
       config: {
@@ -255,12 +256,16 @@ function NewClinicForm({ onCreated }: { onCreated: () => void }) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
-    setBusy(false);
     if (res.ok) {
       onCreated();
     } else {
       const j = await res.json().catch(() => null);
       setError(j?.error?.message ?? "Could not create the clinic.");
+    }
+    } catch {
+      setError("Network error — please check your connection and try again.");
+    } finally {
+      setBusy(false);
     }
   };
 

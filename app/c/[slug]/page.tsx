@@ -1,8 +1,21 @@
 import { notFound } from "next/navigation";
+import type { Metadata } from "next";
 import ChatWidget from "@/app/components/ChatWidget";
 import { SiteNav } from "@/app/components/SiteNav";
 import { loadContext } from "@/lib/context";
 import { resolveClientNoun } from "@/lib/vertical";
+
+export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
+  const { slug } = await params;
+  const ctx = await loadContext(slug).catch(() => null);
+  if (!ctx) return {};
+  const { business } = ctx;
+  const c = business.config;
+  return {
+    title: `${business.name} — ${c.assistantName ?? "AI"} Booking Assistant`,
+    description: c.tagline ?? `Book an appointment at ${business.name} by chat or voice.`,
+  };
+}
 
 export default async function ClinicPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;

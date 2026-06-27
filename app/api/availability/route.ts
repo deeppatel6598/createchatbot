@@ -13,7 +13,8 @@ export async function GET(req: NextRequest) {
   if (!service) {
     return NextResponse.json({ error: { code: "validation_error", message: "service is required" } }, { status: 422 });
   }
-  const { repo, business } = await loadContext(slugFromRequest(req));
-  const result = await dispatchTool(repo, business, "check_availability", { service_name: service, days });
+  const ctx = await loadContext(slugFromRequest(req)).catch(() => null);
+  if (!ctx) return NextResponse.json({ error: { code: "not_found", message: "Unknown clinic" } }, { status: 404 });
+  const result = await dispatchTool(ctx.repo, ctx.business, "check_availability", { service_name: service, days });
   return NextResponse.json({ data: result.data ?? { service, slots: [] } });
 }

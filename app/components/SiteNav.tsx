@@ -18,6 +18,8 @@ export function SiteNav({
   const links = slug
     ? [
         { href: `/c/${slug}`, label: "Home" },
+        { href: `/c/${slug}/about`, label: "About" },
+        { href: `/c/${slug}/contact`, label: "Contact" },
         { href: `/c/${slug}/admin`, label: "Dashboard" },
       ]
     : [
