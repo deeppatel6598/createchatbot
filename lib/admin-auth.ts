@@ -4,23 +4,20 @@ import type { Business } from "@/lib/types";
 import { getAdminPassword, getServerSecret, verifyStaffPassword } from "./secret";
 
 /**
- * Per-clinic staff auth. A password gate that sets an httpOnly, SameSite=Strict
- * session cookie (security-review skill). The session is **scoped to a single
- * business**: the cookie value binds the businessId, so a session issued for one
- * clinic cannot authorize another. The password is the clinic's own (a scrypt
- * hash in its config, set by the operator); the legacy global ADMIN_PASSWORD is
- * a fallback only when a clinic has no hash yet (e.g. the seeded demo). Secrets
- * fail closed in production (see ./secret).
+ * Per-clinic staff auth. The session cookie embeds an issuedAt timestamp so
+ * the server can enforce expiry even if the cookie's Max-Age is stripped or
+ * replayed. Token format: "${businessId}:${issuedAtSec}.${hmac-sha256}".
  */
 export const ADMIN_COOKIE = "admin_session";
-export const ADMIN_MAX_AGE = 60 * 60 * 8; // 8 hours
+export const ADMIN_MAX_AGE = 60 * 60 * 8; // 8 hours in seconds
 
-/** Opaque session value bound to one business. */
-export function sessionToken(businessId: string): string {
+/** Opaque session value bound to one business and a point in time. */
+export function sessionToken(businessId: string, nowSec = Math.floor(Date.now() / 1000)): string {
+  const payload = `${businessId}:${nowSec}`;
   const sig = createHmac("sha256", getServerSecret())
-    .update(`admin-session-v1:${businessId}`)
+    .update(`admin-session-v2:${payload}`)
     .digest("hex");
-  return `${businessId}.${sig}`;
+  return `${payload}.${sig}`;
 }
 
 function safeEqual(a: string, b: string): boolean {
@@ -38,8 +35,30 @@ export function verifyPassword(input: string, business: Business): boolean {
   return safeEqual(input, password);
 }
 
-/** Authed for THIS business only — a cookie for another clinic won't match. */
+/** Authed for THIS business only — validates HMAC and server-side expiry. */
 export function isAuthed(req: NextRequest, businessId: string): boolean {
-  const token = req.cookies.get(ADMIN_COOKIE)?.value;
-  return Boolean(token && safeEqual(token, sessionToken(businessId)));
+  const raw = req.cookies.get(ADMIN_COOKIE)?.value;
+  if (!raw) return false;
+
+  const dotIdx = raw.lastIndexOf(".");
+  if (dotIdx === -1) return false;
+  const payload = raw.slice(0, dotIdx);
+  const providedSig = raw.slice(dotIdx + 1);
+
+  // payload = "${businessId}:${issuedAtSec}"
+  const colonIdx = payload.indexOf(":");
+  if (colonIdx === -1) return false;
+  const tokenBizId = payload.slice(0, colonIdx);
+  const issuedAt = parseInt(payload.slice(colonIdx + 1), 10);
+
+  if (tokenBizId !== businessId || isNaN(issuedAt)) return false;
+
+  const expectedSig = createHmac("sha256", getServerSecret())
+    .update(`admin-session-v2:${payload}`)
+    .digest("hex");
+  if (!safeEqual(providedSig, expectedSig)) return false;
+
+  // Enforce expiry server-side — captured tokens go stale after MAX_AGE.
+  const nowSec = Math.floor(Date.now() / 1000);
+  return nowSec - issuedAt <= ADMIN_MAX_AGE;
 }

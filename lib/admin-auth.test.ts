@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { NextRequest } from "next/server";
-import { ADMIN_COOKIE, isAuthed, sessionToken, verifyPassword } from "@/lib/admin-auth";
+import { ADMIN_COOKIE, ADMIN_MAX_AGE, isAuthed, sessionToken, verifyPassword } from "@/lib/admin-auth";
 import { hashStaffPassword } from "@/lib/secret";
 import type { Business } from "@/lib/types";
 
@@ -33,18 +33,29 @@ describe("admin auth", () => {
     expect(verifyPassword("letmein", b)).toBe(false);
   });
 
-  it("binds the session token to a business", () => {
-    const a = sessionToken("biz_a");
-    expect(a.startsWith("biz_a.")).toBe(true);
-    expect(sessionToken("biz_a")).toBe(a);
-    expect(sessionToken("biz_b")).not.toBe(a);
+  it("binds the session token to a business and a point in time", () => {
+    const nowSec = Math.floor(Date.now() / 1000);
+    const a = sessionToken("biz_a", nowSec);
+    expect(a.startsWith(`biz_a:${nowSec}.`)).toBe(true);
+    // Same inputs → same token (deterministic HMAC).
+    expect(sessionToken("biz_a", nowSec)).toBe(a);
+    // Different business → different token.
+    expect(sessionToken("biz_b", nowSec)).not.toBe(a);
   });
 
-  it("rejects a session cookie issued for another clinic", () => {
-    const req = new NextRequest("http://localhost/api/admin/bookings", {
-      headers: { cookie: `${ADMIN_COOKIE}=${sessionToken("biz_a")}` },
-    });
-    expect(isAuthed(req, "biz_a")).toBe(true);
-    expect(isAuthed(req, "biz_b")).toBe(false);
+  it("accepts a valid token and rejects cross-clinic and expired tokens", () => {
+    const nowSec = Math.floor(Date.now() / 1000);
+    const token = sessionToken("biz_a", nowSec);
+    const req = (t: string) =>
+      new NextRequest("http://localhost/api/admin/bookings", {
+        headers: { cookie: `${ADMIN_COOKIE}=${t}` },
+      });
+
+    expect(isAuthed(req(token), "biz_a")).toBe(true);
+    // Cookie for another clinic must be rejected.
+    expect(isAuthed(req(token), "biz_b")).toBe(false);
+    // Expired token (issuedAt older than MAX_AGE) must be rejected.
+    const staleToken = sessionToken("biz_a", nowSec - ADMIN_MAX_AGE - 1);
+    expect(isAuthed(req(staleToken), "biz_a")).toBe(false);
   });
 });

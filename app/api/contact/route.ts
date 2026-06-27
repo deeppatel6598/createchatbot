@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
   // Notify the clinic inbox (best-effort; falls back to the console outbox).
   try {
     const { business } = await loadContext(slugFromRequest(req));
-    const to = process.env.CLINIC_EMAIL || "team@example.com";
+    const to = business.config.contactEmail || process.env.CLINIC_EMAIL || "team@example.com";
     await sendEmail({ to, ...contactNotificationTemplate(business, parsed.data) });
   } catch (err) {
     console.error("contact notification failed", err);

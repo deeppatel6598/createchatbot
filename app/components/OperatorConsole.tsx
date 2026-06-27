@@ -188,6 +188,7 @@ function NewClinicForm({ onCreated }: { onCreated: () => void }) {
   const [hoursText, setHoursText] = useState("Mon–Fri 9am–5pm");
   const [policies, setPolicies] = useState("We ask for 24 hours' notice for cancellations.");
   const [emergencyLine, setEmergencyLine] = useState("");
+  const [contactEmail, setContactEmail] = useState("");
   const [staffPassword, setStaffPassword] = useState("");
   const [autoFaq, setAutoFaq] = useState(true);
   const [address, setAddress] = useState("");
@@ -228,6 +229,7 @@ function NewClinicForm({ onCreated }: { onCreated: () => void }) {
         hoursText: hoursText.trim() || undefined,
         policies: policies.split("\n").map((s) => s.trim()).filter(Boolean),
         emergencyLine: emergencyLine.trim() || undefined,
+        contactEmail: contactEmail.trim() || undefined,
         clientNoun: { singular: nounSingular.trim(), plural: nounPlural.trim() },
       },
       staffPassword,
@@ -323,6 +325,7 @@ function NewClinicForm({ onCreated }: { onCreated: () => void }) {
         </Row>
         <Labeled label="Policies (one per line)"><textarea className={`${field} h-auto py-2`} rows={2} value={policies} onChange={(e) => setPolicies(e.target.value)} /></Labeled>
         <Labeled label="Emergency line (optional)"><input className={field} value={emergencyLine} onChange={(e) => setEmergencyLine(e.target.value)} /></Labeled>
+        <Labeled label="Contact email (for contact form & calendar invites)"><input className={field} type="email" value={contactEmail} onChange={(e) => setContactEmail(e.target.value)} /></Labeled>
       </Section>
 
       <Section title="Services">
