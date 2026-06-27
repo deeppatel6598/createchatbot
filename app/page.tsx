@@ -16,14 +16,14 @@ export default function Home() {
         <div className="mx-auto grid max-w-6xl items-center gap-10 px-6 py-12 lg:grid-cols-2">
           <section className="order-2 lg:order-1">
             <p className="mb-3 inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
-              🐾 AI voice &amp; chat concierge
+              ✨ AI voice &amp; chat concierge
             </p>
             <h1 className="text-balance text-4xl font-semibold tracking-tight text-foreground sm:text-5xl">
               A warm, human-sounding assistant for every booking business.
             </h1>
             <p className="mt-4 max-w-md text-pretty text-muted-foreground">
               Meet <strong className="text-foreground">Sofia</strong> — she answers
-              everything about the clinic (location, hours, facilities, services,
+              everything about the business (location, hours, facilities, services,
               pricing) and books appointments by chat or voice, in a soft, caring
               tone. Try her on the right — tap the mic and just talk, or type a question.
             </p>
@@ -36,7 +36,7 @@ export default function Home() {
               ))}
             </ul>
             <p className="mt-6 max-w-md text-xs text-muted-foreground">
-              Demo runs with zero setup using an in-memory clinic. Add an
+              Demo runs with zero setup using an in-memory business. Add an
               <code className="mx-1 rounded bg-muted px-1 text-foreground">ANTHROPIC_API_KEY</code>
               for the full natural conversation, and a
               <code className="mx-1 rounded bg-muted px-1 text-foreground">DATABASE_URL</code>
