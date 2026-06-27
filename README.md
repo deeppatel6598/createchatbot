@@ -25,13 +25,30 @@ Out of the box it runs with **no API keys and no database**:
 
 Add capabilities by setting env vars (copy `.env.example` → `.env.local`):
 - `ANTHROPIC_API_KEY` → full natural, tool-using conversation (Claude).
-- `DATABASE_URL` → Postgres persistence (`npm run db:push && npm run seed`).
+- `DATABASE_URL` → Postgres persistence (**required to onboard real clinics**;
+  `npm run db:push && npm run seed`).
+- `OPERATOR_PASSWORD` / `OPERATOR_SECRET` → the operator console that onboards clinics.
 - `ELEVENLABS_API_KEY` → the warm, human production voice (see the plan).
 - `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` / `GOOGLE_REFRESH_TOKEN` → sync
-  bookings to Google Calendar and respect each vet's free/busy (else a no-op).
+  bookings to Google Calendar and respect each resource's free/busy (else a no-op).
 
-**Staff dashboard:** visit `/admin` (demo password `letmein`, set via
-`ADMIN_PASSWORD`) to view, reschedule, and cancel bookings.
+## Multi-tenant: onboard many clinics
+
+This is a **self-service platform**: an operator signs in at **`/operator`** (dev
+password `operator`, set via `OPERATOR_PASSWORD`) and adds a clinic — name, contact,
+branding, persona, services, team + weekly hours, and FAQ. Each clinic instantly gets:
+- a branded chat/voice booking site at **`/c/<slug>`** (the client noun —
+  pet / patient / client — adapts to the clinic's vertical or its own setting), and
+- a staff dashboard at **`/c/<slug>/admin`**, guarded by that clinic's own password.
+
+Tenancy is end-to-end: every record is `businessId`-scoped, the public pages pass
+`?b=<slug>` to the API, and the staff session cookie is bound to one clinic so it
+can't cross to another. Onboarding real clinics requires `DATABASE_URL` (the
+in-memory mode resets on restart and is per-instance — demo only).
+
+**Staff dashboard:** `/c/<slug>/admin` (the legacy `/admin` redirects to the default
+clinic). A clinic's password is set by the operator; the demo clinic falls back to
+`ADMIN_PASSWORD` (`letmein` in dev).
 
 ## Verify
 
@@ -90,10 +107,13 @@ Patterns came from the skills in this monorepo (`ecc/`, `superpowers/`):
 
 ## Roadmap (fast-follows)
 
-Waitlist/cancellation fill, shared-store rate limiting, and Auth.js per-staff
-roles. See the plan for the full phased roadmap.
+Per-clinic embeddable widget (relax CSP `frame-ancestors` per host), child-collection
+editing in the operator console, waitlist/cancellation fill, shared-store rate
+limiting, and Auth.js per-staff roles. See the plan for the full phased roadmap.
 
-**Done:** booking domain · AI concierge (Claude + keyless fallback) · chat+voice
+**Done:** **multi-tenant platform** — operator console (`/operator`) onboards clinics,
+each with its own branded site (`/c/<slug>`), staff dashboard, and configurable
+client-noun · booking domain · AI concierge (Claude + keyless fallback) · chat+voice
 widget · ElevenLabs production voice (Web Speech fallback) · staff admin
 dashboard · returning-client memory · multilingual (en/es/fr/de/pt/hi, voice
 follows the language, safety line localized) · light/dark theming + About/Contact

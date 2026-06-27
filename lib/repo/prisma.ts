@@ -1,6 +1,7 @@
 import {
   Appointment,
   Business,
+  BusinessGraphInput,
   Client,
   ConflictError,
   KnowledgeKind,
@@ -20,16 +21,107 @@ export class PrismaRepo implements Repo {
     return getPrisma();
   }
 
+  private toBusiness = (b: {
+    id: string;
+    slug: string;
+    name: string;
+    vertical: string;
+    config: unknown;
+  }): Business => ({
+    id: b.id,
+    slug: b.slug,
+    name: b.name,
+    vertical: b.vertical as Business["vertical"],
+    config: b.config as unknown as Business["config"],
+  });
+
   async getBusinessBySlug(slug: string): Promise<Business | null> {
     const b = await this.db.business.findUnique({ where: { slug } });
-    if (!b) return null;
-    return {
-      id: b.id,
-      slug: b.slug,
-      name: b.name,
-      vertical: b.vertical as Business["vertical"],
-      config: b.config as unknown as Business["config"],
-    };
+    return b ? this.toBusiness(b) : null;
+  }
+
+  async getBusinessById(id: string): Promise<Business | null> {
+    const b = await this.db.business.findUnique({ where: { id } });
+    return b ? this.toBusiness(b) : null;
+  }
+
+  async listBusinesses(): Promise<Business[]> {
+    const rows = await this.db.business.findMany({ orderBy: { createdAt: "asc" } });
+    return rows.map(this.toBusiness);
+  }
+
+  async createBusinessGraph(input: BusinessGraphInput): Promise<Business> {
+    try {
+      const created = await this.db.$transaction(async (tx) => {
+        const business = await tx.business.create({
+          data: {
+            slug: input.slug,
+            name: input.name,
+            vertical: input.vertical,
+            config: input.config as unknown as Prisma.InputJsonValue,
+          },
+        });
+        if (input.services.length) {
+          await tx.service.createMany({
+            data: input.services.map((s) => ({
+              businessId: business.id,
+              name: s.name,
+              durationMin: s.durationMin,
+              priceCents: s.priceCents ?? null,
+              description: s.description ?? null,
+            })),
+          });
+        }
+        for (const r of input.resources) {
+          const resource = await tx.resource.create({
+            data: { businessId: business.id, name: r.name, role: r.role ?? null, googleCalId: r.googleCalId ?? null },
+          });
+          if (r.availability.length) {
+            await tx.availabilityRule.createMany({
+              data: r.availability.map((a) => ({ resourceId: resource.id, weekday: a.weekday, startMin: a.startMin, endMin: a.endMin })),
+            });
+          }
+        }
+        if (input.knowledge.length) {
+          await tx.knowledgeEntry.createMany({
+            data: input.knowledge.map((k) => ({
+              businessId: business.id,
+              kind: k.kind,
+              title: k.title,
+              body: k.body,
+              metadata: (k.metadata ?? undefined) as Prisma.InputJsonValue | undefined,
+            })),
+          });
+        }
+        return business;
+      });
+      return this.toBusiness(created);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (/Unique constraint|P2002/.test(msg)) {
+        throw new ConflictError(`A clinic with slug "${input.slug}" already exists.`);
+      }
+      throw e;
+    }
+  }
+
+  async updateBusiness(
+    id: string,
+    patch: Partial<Pick<Business, "name" | "vertical" | "config">>,
+  ): Promise<Business> {
+    const b = await this.db.business.update({
+      where: { id },
+      data: {
+        ...(patch.name !== undefined ? { name: patch.name } : {}),
+        ...(patch.vertical !== undefined ? { vertical: patch.vertical } : {}),
+        ...(patch.config !== undefined ? { config: patch.config as unknown as Prisma.InputJsonValue } : {}),
+      },
+    });
+    return this.toBusiness(b);
+  }
+
+  async deleteBusiness(id: string): Promise<void> {
+    await this.db.business.delete({ where: { id } });
   }
 
   async listServices(businessId: string): Promise<Service[]> {

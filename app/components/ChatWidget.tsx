@@ -11,6 +11,7 @@ import {
   type VoiceProvider,
 } from "@/lib/voice";
 import { detectLanguage, t, toBCP47 } from "@/lib/lang";
+import { apiUrl } from "@/lib/api-url";
 
 type ServiceCard = { name: string; price: string | null; durationMin: number; description: string | null };
 type Slot = { iso: string; label: string; with: string };
@@ -27,6 +28,7 @@ interface BizMeta {
   assistantName: string;
   tagline?: string;
   branding: { primary: string; accent: string; bubbleEmoji?: string };
+  clientNoun?: { singular: string; plural: string };
   persona: PersonaTTS & { displayName: string };
   voiceProvider: VoiceProvider;
   services: ServiceCard[];
@@ -34,7 +36,7 @@ interface BizMeta {
   emergencyLine?: string;
 }
 
-export default function ChatWidget() {
+export default function ChatWidget({ slug }: { slug?: string }) {
   const [biz, setBiz] = useState<BizMeta | null>(null);
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
@@ -57,13 +59,13 @@ export default function ChatWidget() {
   const accent = biz?.branding.accent ?? "#E8B04B";
 
   useEffect(() => {
-    fetch("/api/business")
+    fetch(apiUrl("/api/business", slug))
       .then((r) => r.json())
       .then(({ data }: { data: BizMeta }) => {
         setBiz(data);
-        const fresh = `Hi there — I'm ${data.assistantName} at ${data.name}. ${data.tagline ?? ""} How can I help you and your pet today?`;
+        const fresh = `Hi there — I'm ${data.assistantName} at ${data.name}. ${data.tagline ?? ""} How can I help you and your ${data.clientNoun?.singular ?? "pet"} today?`;
         // Returning-client recognition (signed cookie set on a prior booking).
-        fetch("/api/client/me", { cache: "no-store" })
+        fetch(apiUrl("/api/client/me", slug), { cache: "no-store" })
           .then((r) => r.json())
           .then(({ data: me }) => {
             if (me?.returning) {
@@ -82,7 +84,7 @@ export default function ChatWidget() {
           .catch(() => setMessages([{ role: "assistant", content: fresh }]));
       })
       .catch(() => {});
-  }, []);
+  }, [slug]);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
@@ -112,7 +114,7 @@ export default function ChatWidget() {
       setInput("");
       setSending(true);
       try {
-        const res = await fetch("/api/chat", {
+        const res = await fetch(apiUrl("/api/chat", slug), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ messages: next.map((m) => ({ role: m.role, content: m.content })) }),
@@ -128,7 +130,7 @@ export default function ChatWidget() {
         setSending(false);
       }
     },
-    [messages, sending, say],
+    [messages, sending, say, slug],
   );
 
   const toggleMic = useCallback(() => {
@@ -158,33 +160,36 @@ export default function ChatWidget() {
 
   const submitBooking = useCallback(
     async (form: { clientName: string; phone: string; email?: string; petName?: string; serviceName: string; startISO: string }) => {
-      const res = await fetch("/api/bookings", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
-      });
-      const json = await res.json();
-      if (res.ok) {
-        const d = json.data;
-        const confirm = t(langRef.current, "booked", {
-          first: form.clientName.split(" ")[0],
-          service: d.service,
-          when: d.when,
-          withName: d.with,
+      try {
+        const res = await fetch(apiUrl("/api/bookings", slug), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(form),
         });
-        setMessages((m) => [
-          ...m,
-          { role: "assistant", content: confirm, ui: { kind: "booked", service: d.service, when: d.when, with: d.with, price: d.price } },
-        ]);
-        say(confirm);
-        setBooking(null);
-      } else {
-        const msg = json?.error?.message ?? "That time was just taken.";
-        setMessages((m) => [...m, { role: "assistant", content: `Oh — ${msg} Shall we pick another time?` }]);
-        setBooking(null);
+        const json = await res.json();
+        if (res.ok) {
+          const d = json.data;
+          const confirm = t(langRef.current, "booked", {
+            first: form.clientName.split(" ")[0],
+            service: d.service,
+            when: d.when,
+            withName: d.with,
+          });
+          setMessages((m) => [
+            ...m,
+            { role: "assistant", content: confirm, ui: { kind: "booked", service: d.service, when: d.when, with: d.with, price: d.price } },
+          ]);
+          say(confirm);
+        } else {
+          const msg = json?.error?.message ?? "That time was just taken.";
+          setMessages((m) => [...m, { role: "assistant", content: `Oh — ${msg} Shall we pick another time?` }]);
+        }
+      } catch {
+        setMessages((m) => [...m, { role: "assistant", content: "I'm having trouble connecting. Please try again." }]);
       }
+      setBooking(null);
     },
-    [say],
+    [say, slug],
   );
 
   if (!biz) {
@@ -290,6 +295,7 @@ export default function ChatWidget() {
           service={booking.service}
           startISO={booking.startISO}
           label={booking.label}
+          dependentNoun={biz.clientNoun?.singular ?? "pet"}
           defaultName={returning?.name ?? ""}
           defaultPhone={returning?.phone ?? ""}
           onCancel={() => setBooking(null)}
@@ -383,6 +389,7 @@ function BookingForm({
   service,
   startISO,
   label,
+  dependentNoun,
   defaultName,
   defaultPhone,
   onCancel,
@@ -392,11 +399,13 @@ function BookingForm({
   service: string;
   startISO: string;
   label: string;
+  dependentNoun: string;
   defaultName: string;
   defaultPhone: string;
   onCancel: () => void;
   onSubmit: (form: { clientName: string; phone: string; email?: string; petName?: string; serviceName: string; startISO: string }) => Promise<void>;
 }) {
+  const dependentLabel = `${dependentNoun.charAt(0).toUpperCase()}${dependentNoun.slice(1)}'s name (optional)`;
   const [clientName, setClientName] = useState(defaultName);
   const [phone, setPhone] = useState(defaultPhone);
   const [email, setEmail] = useState("");
@@ -413,7 +422,7 @@ function BookingForm({
           <input value={clientName} onChange={(e) => setClientName(e.target.value)} placeholder="Your name" aria-label="Your name" className="h-10 w-full rounded-xl border border-input bg-background px-3 text-sm text-foreground outline-none placeholder:text-muted-foreground focus:border-[var(--brand)]" />
           <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Phone number" inputMode="tel" aria-label="Phone number" className="h-10 w-full rounded-xl border border-input bg-background px-3 text-sm text-foreground outline-none placeholder:text-muted-foreground focus:border-[var(--brand)]" />
           <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email (optional — for confirmation)" type="email" inputMode="email" aria-label="Email" className="h-10 w-full rounded-xl border border-input bg-background px-3 text-sm text-foreground outline-none placeholder:text-muted-foreground focus:border-[var(--brand)]" />
-          <input value={petName} onChange={(e) => setPetName(e.target.value)} placeholder="Pet's name (optional)" aria-label="Pet's name" className="h-10 w-full rounded-xl border border-input bg-background px-3 text-sm text-foreground outline-none placeholder:text-muted-foreground focus:border-[var(--brand)]" />
+          <input value={petName} onChange={(e) => setPetName(e.target.value)} placeholder={dependentLabel} aria-label={dependentLabel} className="h-10 w-full rounded-xl border border-input bg-background px-3 text-sm text-foreground outline-none placeholder:text-muted-foreground focus:border-[var(--brand)]" />
         </div>
         <div className="mt-3 flex gap-2">
           <button onClick={onCancel} className="h-10 flex-1 rounded-xl border border-border text-sm text-foreground transition active:scale-95">

@@ -1,13 +1,16 @@
-import { NextResponse } from "next/server";
-import { loadContext } from "@/lib/context";
+import { NextRequest, NextResponse } from "next/server";
+import { loadContext, slugFromRequest } from "@/lib/context";
 import { elevenLabsConfigured } from "@/lib/voice/elevenlabs-server";
+import { resolveClientNoun } from "@/lib/vertical";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /** GET /api/business — public meta the widget needs to render + speak. */
-export async function GET() {
-  const { repo, business } = await loadContext();
+export async function GET(req: NextRequest) {
+  const ctx = await loadContext(slugFromRequest(req)).catch(() => null);
+  if (!ctx) return NextResponse.json({ error: { code: "not_found", message: "Unknown clinic" } }, { status: 404 });
+  const { repo, business } = ctx;
   const services = await repo.listServices(business.id);
   const c = business.config;
   return NextResponse.json({
@@ -17,6 +20,7 @@ export async function GET() {
       assistantName: c.assistantName,
       tagline: c.tagline,
       branding: c.branding,
+      clientNoun: resolveClientNoun(business),
       persona: c.voice,
       voiceProvider: elevenLabsConfigured() ? "elevenlabs" : "webspeech",
       hoursText: c.hoursText,

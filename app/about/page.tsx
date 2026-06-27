@@ -3,14 +3,14 @@ import Link from "next/link";
 import { SiteNav } from "../components/SiteNav";
 
 export const metadata: Metadata = {
-  title: "About — Paws & Care AI Concierge",
-  description: "How our warm, human-sounding AI assistant helps clients and clinics.",
+  title: "About — Sofia AI Booking Concierge",
+  description: "How Sofia, our warm, human-sounding AI booking assistant, helps clients and clinics.",
 };
 
 const steps = [
   { n: "1", title: "Ask anything", body: "Clients ask about hours, location, facilities, services or pricing — by chat or voice, in their own language." },
-  { n: "2", title: "Book in seconds", body: "Sofia offers real open times and books, reschedules, or cancels — never double-booking a vet." },
-  { n: "3", title: "Feel cared for", body: "A soft-spoken voice greets returning clients by name and remembers their pet and next visit." },
+  { n: "2", title: "Book in seconds", body: "Sofia offers real open times and books, reschedules, or cancels — never double-booking a team member." },
+  { n: "3", title: "Feel cared for", body: "A soft-spoken voice greets returning clients by name and remembers their last visit." },
 ];
 
 const features = [
@@ -19,7 +19,7 @@ const features = [
   { title: "Warm, human voice", body: "Production voice via ElevenLabs, with a built-in browser fallback so it works anywhere." },
   { title: "Multilingual", body: "Detects the client's language and replies in it, with the safety guidance localized too." },
   { title: "Safety first", body: "Never gives medical advice — it reassures, then books the soonest visit or shares the emergency line." },
-  { title: "Multi-tenant", body: "Configure the business profile, services, hours and brand voice for any booking business." },
+  { title: "Multi-tenant platform", body: "One operator console onboards any booking business — each gets its own branded site, staff dashboard, and AI persona." },
 ];
 
 export default function AboutPage() {
@@ -35,9 +35,9 @@ export default function AboutPage() {
             A caring front desk that never sleeps.
           </h1>
           <p className="mt-4 max-w-2xl text-pretty text-muted-foreground">
-            Paws &amp; Care&apos;s assistant, Sofia, is built to feel like a real, warm
-            person at the front desk — answering questions and booking appointments
-            for worried pet owners, day or night, in their language.
+            Sofia is built to feel like a real, warm person at the front desk —
+            answering questions and booking appointments for clients, day or night,
+            in their own language.
           </p>
 
           <h2 className="mt-12 text-xl font-semibold text-foreground">How it works</h2>

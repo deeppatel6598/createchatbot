@@ -92,8 +92,8 @@ export async function rescheduleAppointment(
   if (!free) throw new ConflictError("That new time isn't available.");
 
   const newEnd = addMinutes(new Date(newStartISO), service.durationMin).toISOString();
-  await repo.updateAppointment(appt.id, { status: "CANCELLED" });
-  return repo.createAppointment({
+  // Create the new appointment first — if it fails (slot taken), the original is untouched.
+  const moved = await repo.createAppointment({
     businessId: business.id,
     clientId: appt.clientId,
     resourceId: free.id,
@@ -103,6 +103,8 @@ export async function rescheduleAppointment(
     notes: appt.notes ?? undefined,
     attributes: appt.attributes ?? undefined,
   });
+  await repo.updateAppointment(appt.id, { status: "CANCELLED" });
+  return moved;
 }
 
 export async function cancelUpcomingByPhone(
@@ -134,8 +136,8 @@ export async function rescheduleUpcomingByPhone(
   if (!free) throw new ConflictError("That new time isn't available.");
 
   const newEnd = addMinutes(new Date(newStartISO), service.durationMin).toISOString();
-  await repo.updateAppointment(next.id, { status: "CANCELLED" });
-  return repo.createAppointment({
+  // Create first — if the slot is taken, the original appointment is untouched.
+  const moved = await repo.createAppointment({
     businessId: business.id,
     clientId: next.clientId,
     resourceId: free.id,
@@ -144,4 +146,6 @@ export async function rescheduleUpcomingByPhone(
     endsAt: newEnd,
     notes: next.notes ?? undefined,
   });
+  await repo.updateAppointment(next.id, { status: "CANCELLED" });
+  return moved;
 }

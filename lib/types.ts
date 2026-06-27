@@ -32,6 +32,16 @@ export interface BrandConfig {
   hoursText?: string;
   policies?: string[];
   emergencyLine?: string;
+  /**
+   * What the business serves, used to localize wording (e.g. veterinary → pet,
+   * dental → patient, salon → client). When unset, a vertical default applies.
+   */
+  clientNoun?: { singular: string; plural: string };
+  /**
+   * Per-clinic staff password (scrypt hash). Set by the operator at onboarding.
+   * NEVER serialized to the public /api/business meta.
+   */
+  staffAuth?: { hash: string; algo: "scrypt" };
 }
 
 export interface Business {
@@ -132,6 +142,43 @@ export interface KnowledgeEntry {
   metadata?: Record<string, unknown> | null;
 }
 
+/**
+ * The full graph an operator submits to provision a new clinic in one atomic
+ * step: the business plus its services, team (resources) with weekly hours, and
+ * knowledge/FAQ entries. Built by the provisioning domain (lib/domain/provisioning.ts).
+ */
+export interface BusinessGraphInput {
+  slug: string;
+  name: string;
+  vertical: Vertical;
+  config: BrandConfig;
+  services: Array<{
+    name: string;
+    durationMin: number;
+    priceCents?: number | null;
+    description?: string | null;
+  }>;
+  resources: Array<{
+    name: string;
+    role?: string | null;
+    googleCalId?: string | null;
+    availability: Array<{ weekday: number; startMin: number; endMin: number }>;
+  }>;
+  knowledge: Array<{
+    kind: KnowledgeKind;
+    title: string;
+    body: string;
+    metadata?: Record<string, unknown> | null;
+  }>;
+}
+
+export interface BusinessSummary {
+  id: string;
+  slug: string;
+  name: string;
+  vertical: Vertical;
+}
+
 export type Channel = "chat" | "voice";
 
 export interface ChatMessage {
@@ -146,6 +193,19 @@ export interface ChatMessage {
  */
 export interface Repo {
   getBusinessBySlug(slug: string): Promise<Business | null>;
+  /** Resolve a tenant by id (used by the businessId-scoped admin session). */
+  getBusinessById(id: string): Promise<Business | null>;
+  /** All tenants — operator console list. */
+  listBusinesses(): Promise<Business[]>;
+  /** Create a tenant and all its children atomically (operator onboarding). */
+  createBusinessGraph(input: BusinessGraphInput): Promise<Business>;
+  /** Update a tenant's identity/config (operator edit). */
+  updateBusiness(
+    id: string,
+    patch: Partial<Pick<Business, "name" | "vertical" | "config">>,
+  ): Promise<Business>;
+  /** Remove a tenant and all its children (cascade). */
+  deleteBusiness(id: string): Promise<void>;
   listServices(businessId: string): Promise<Service[]>;
   listResources(businessId: string): Promise<Resource[]>;
   listAvailabilityRules(resourceId: string): Promise<AvailabilityRule[]>;

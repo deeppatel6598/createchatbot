@@ -1,13 +1,14 @@
 "use client";
 
 import { useState } from "react";
+import { apiUrl } from "@/lib/api-url";
 
 type State = "idle" | "sending" | "sent" | "error";
 
 const field =
   "h-11 w-full rounded-xl border border-input bg-background px-3 text-sm text-foreground outline-none transition placeholder:text-muted-foreground focus:border-primary focus:ring-2 focus:ring-ring/40";
 
-export function ContactForm() {
+export function ContactForm({ clientNoun = "pet", slug }: { clientNoun?: string; slug?: string }) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [message, setMessage] = useState("");
@@ -22,7 +23,7 @@ export function ContactForm() {
     setState("sending");
     setError("");
     try {
-      const res = await fetch("/api/contact", {
+      const res = await fetch(apiUrl("/api/contact", slug), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name, email, message }),
@@ -44,7 +45,7 @@ export function ContactForm() {
   if (state === "sent") {
     return (
       <div className="rounded-2xl border border-border bg-card p-6">
-        <p className="font-medium text-card-foreground">Thanks — we&apos;ve got your message. 🐾</p>
+        <p className="font-medium text-card-foreground">Thanks — we&apos;ve got your message.</p>
         <p className="mt-1 text-sm text-muted-foreground">A team member will get back to you shortly.</p>
         <button
           onClick={() => setState("idle")}
@@ -68,7 +69,7 @@ export function ContactForm() {
       </div>
       <div>
         <label htmlFor="c-message" className="mb-1 block text-sm font-medium text-card-foreground">Message</label>
-        <textarea id="c-message" value={message} onChange={(e) => setMessage(e.target.value)} rows={5} className={`${field} h-auto py-2`} placeholder="How can we help you and your pet?" />
+        <textarea id="c-message" value={message} onChange={(e) => setMessage(e.target.value)} rows={5} className={`${field} h-auto py-2`} placeholder={`How can we help you and your ${clientNoun}?`} />
       </div>
       {state === "error" && <p className="text-sm text-danger">{error}</p>}
       <button

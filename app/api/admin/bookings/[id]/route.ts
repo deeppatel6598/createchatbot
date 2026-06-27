@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { isAuthed } from "@/lib/admin-auth";
-import { loadContext } from "@/lib/context";
+import { loadContext, slugFromRequest } from "@/lib/context";
 import { rescheduleAppointment } from "@/lib/domain/booking";
 import { formatDateTime } from "@/lib/domain/time";
 import { ConflictError, NotFoundError } from "@/lib/types";
@@ -14,7 +14,10 @@ const PatchBody = z.object({ newStartISO: z.string().datetime() });
 
 /** PATCH /api/admin/bookings/:id — reschedule to a new time. */
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  if (!isAuthed(req)) {
+  const ctx = await loadContext(slugFromRequest(req)).catch(() => null);
+  if (!ctx) return NextResponse.json({ error: { code: "not_found", message: "Unknown clinic" } }, { status: 404 });
+  const { repo, business } = ctx;
+  if (!isAuthed(req, business.id)) {
     return NextResponse.json({ error: { code: "unauthorized", message: "Sign in" } }, { status: 401 });
   }
   const { id } = await params;
@@ -29,7 +32,6 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     return NextResponse.json({ error: { code: "validation_error", message: "newStartISO required" } }, { status: 422 });
   }
 
-  const { repo, business } = await loadContext();
   const all = await repo.listAppointments(business.id, { includeCancelled: true });
   const appt = all.find((a) => a.id === id);
   if (!appt) return NextResponse.json({ error: { code: "not_found", message: "Appointment not found" } }, { status: 404 });
@@ -49,11 +51,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
 /** DELETE /api/admin/bookings/:id — cancel the appointment. */
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  if (!isAuthed(req)) {
+  const ctx = await loadContext(slugFromRequest(req)).catch(() => null);
+  if (!ctx) return NextResponse.json({ error: { code: "not_found", message: "Unknown clinic" } }, { status: 404 });
+  const { repo, business } = ctx;
+  if (!isAuthed(req, business.id)) {
     return NextResponse.json({ error: { code: "unauthorized", message: "Sign in" } }, { status: 401 });
   }
   const { id } = await params;
-  const { repo, business } = await loadContext();
   try {
     // Load first so we have the synced event id to remove from the calendar.
     const all = await repo.listAppointments(business.id, { includeCancelled: true });

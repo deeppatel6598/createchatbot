@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { loadContext } from "@/lib/context";
+import { loadContext, slugFromRequest } from "@/lib/context";
 import { loadClientContext } from "@/lib/domain/client-context";
 import { CLIENT_COOKIE, verifyClientId } from "@/lib/client-session";
 
@@ -11,7 +11,9 @@ export async function GET(req: NextRequest) {
   const clientId = verifyClientId(req.cookies.get(CLIENT_COOKIE)?.value);
   if (!clientId) return NextResponse.json({ data: { returning: false } });
 
-  const { repo, business } = await loadContext();
+  const tenantCtx = await loadContext(slugFromRequest(req)).catch(() => null);
+  if (!tenantCtx) return NextResponse.json({ data: { returning: false } });
+  const { repo, business } = tenantCtx;
   const ctx = await loadClientContext(repo, business, { clientId });
   if (!ctx) return NextResponse.json({ data: { returning: false } });
 

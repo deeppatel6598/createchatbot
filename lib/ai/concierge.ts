@@ -3,6 +3,7 @@ import type { Business, ChatMessage, Repo } from "@/lib/types";
 import type { ClientContext } from "@/lib/domain/client-context";
 import { buildSystemPrompt } from "./prompt";
 import { dispatchTool, TOOLS, type ToolResult } from "./tools";
+import { resolveClientNoun } from "@/lib/vertical";
 import { runFallback } from "./fallback";
 import type { ConciergeResult, ConciergeUI } from "./types";
 
@@ -49,6 +50,7 @@ export async function runConcierge(
 
   const services = await repo.listServices(business.id);
   const system = buildSystemPrompt(business, services, clientContext);
+  const noun = resolveClientNoun(business).singular;
   const client = new Anthropic();
 
   // History must start with a user turn for the Messages API.
@@ -90,7 +92,7 @@ export async function runConcierge(
       .map((b) => b.text)
       .join(" ")
       .trim();
-    return { reply: reply || "I'm here — how can I help you and your pet?", ui: lastUI, usedClaude: true };
+    return { reply: reply || `I'm here — how can I help you and your ${noun}?`, ui: lastUI, usedClaude: true };
   }
 
   return {

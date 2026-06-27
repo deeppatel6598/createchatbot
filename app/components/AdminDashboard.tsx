@@ -1,0 +1,249 @@
+"use client";
+
+import { useCallback, useEffect, useState } from "react";
+import { apiUrl } from "@/lib/api-url";
+
+type Booking = {
+  id: string;
+  clientName: string;
+  phone: string;
+  petName: string | null;
+  service: string;
+  with: string;
+  startISO: string;
+  when: string;
+  status: string;
+};
+type Slot = { iso: string; label: string; with: string };
+
+/** Per-clinic staff dashboard. `slug` scopes every request to one tenant. */
+export function AdminDashboard({ slug }: { slug?: string }) {
+  const [status, setStatus] = useState<"loading" | "login" | "ready">("loading");
+  const [bookings, setBookings] = useState<Booking[]>([]);
+  const [password, setPassword] = useState("");
+  const [loginError, setLoginError] = useState("");
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [reschedule, setReschedule] = useState<{ id: string; service: string; slots: Slot[] } | null>(null);
+  const [calendarOn, setCalendarOn] = useState(false);
+  const [brand, setBrand] = useState<{ name: string; primary: string }>({ name: "Bookings", primary: "#2F6F6A" });
+
+  useEffect(() => {
+    fetch(apiUrl("/api/business", slug), { cache: "no-store" })
+      .then((r) => r.json())
+      .then(({ data }) => {
+        if (data?.name) setBrand({ name: data.name, primary: data.branding?.primary ?? "#2F6F6A" });
+      })
+      .catch(() => {});
+  }, [slug]);
+
+  const loadCalendar = useCallback(async () => {
+    const res = await fetch(apiUrl("/api/admin/calendar", slug), { cache: "no-store" });
+    if (!res.ok) return;
+    const json = await res.json();
+    setCalendarOn(Boolean(json.data?.configured));
+  }, [slug]);
+
+  const load = useCallback(async () => {
+    const res = await fetch(apiUrl("/api/admin/bookings", slug), { cache: "no-store" });
+    if (res.status === 401) {
+      setStatus("login");
+      return;
+    }
+    const json = await res.json();
+    setBookings(json.data ?? []);
+    setStatus("ready");
+    void loadCalendar();
+  }, [slug, loadCalendar]);
+
+  useEffect(() => {
+    let active = true;
+    fetch(apiUrl("/api/admin/bookings", slug), { cache: "no-store" })
+      .then(async (res) => {
+        if (!active) return;
+        if (res.status === 401) {
+          setStatus("login");
+          return;
+        }
+        const json = await res.json();
+        setBookings(json.data ?? []);
+        setStatus("ready");
+        void loadCalendar();
+      })
+      .catch(() => {
+        if (active) setStatus("login");
+      });
+    return () => {
+      active = false;
+    };
+  }, [slug, loadCalendar]);
+
+  const login = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoginError("");
+    const res = await fetch(apiUrl("/api/admin/login", slug), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password }),
+    });
+    if (res.ok) {
+      setPassword("");
+      setStatus("loading");
+      await load();
+    } else {
+      setLoginError("Incorrect password.");
+    }
+  };
+
+  const logout = async () => {
+    await fetch(apiUrl("/api/admin/logout", slug), { method: "POST" });
+    setBookings([]);
+    setStatus("login");
+  };
+
+  const cancel = async (id: string) => {
+    setBusyId(id);
+    await fetch(apiUrl(`/api/admin/bookings/${id}`, slug), { method: "DELETE" });
+    setBusyId(null);
+    await load();
+  };
+
+  const openReschedule = async (b: Booking) => {
+    setReschedule({ id: b.id, service: b.service, slots: [] });
+    const res = await fetch(apiUrl(`/api/availability?service=${encodeURIComponent(b.service)}`, slug), { cache: "no-store" });
+    const json = await res.json();
+    setReschedule({ id: b.id, service: b.service, slots: json.data?.slots ?? [] });
+  };
+
+  const doReschedule = async (id: string, iso: string) => {
+    setBusyId(id);
+    const res = await fetch(apiUrl(`/api/admin/bookings/${id}`, slug), {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ newStartISO: iso }),
+    });
+    setBusyId(null);
+    setReschedule(null);
+    if (!res.ok) alert("That time was just taken — pick another.");
+    await load();
+  };
+
+  if (status === "loading") {
+    return <main className="grid min-h-screen place-items-center bg-background text-muted-foreground">Loading…</main>;
+  }
+
+  if (status === "login") {
+    return (
+      <main className="grid min-h-screen place-items-center bg-background p-6">
+        <form onSubmit={login} className="w-full max-w-sm rounded-2xl border border-border bg-card p-6 shadow-sm">
+          <h1 className="text-lg font-semibold text-card-foreground">Staff sign in</h1>
+          <p className="mt-1 text-sm text-muted-foreground">{brand.name} — booking dashboard</p>
+          <input
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="Password"
+            aria-label="Password"
+            className="mt-4 h-11 w-full rounded-xl border border-input bg-background px-3 text-sm text-foreground outline-none placeholder:text-muted-foreground focus:border-primary focus:ring-2 focus:ring-ring/40"
+          />
+          {loginError && <p className="mt-2 text-xs text-danger">{loginError}</p>}
+          <button type="submit" className="mt-4 h-11 w-full rounded-xl text-sm font-medium text-white transition active:scale-[0.98]" style={{ background: brand.primary }}>
+            Sign in
+          </button>
+        </form>
+      </main>
+    );
+  }
+
+  return (
+    <main className="min-h-screen bg-background">
+      <header className="flex items-center justify-between border-b border-border bg-card px-6 py-4">
+        <div>
+          <h1 className="text-lg font-semibold text-foreground">Bookings</h1>
+          <p className="text-xs text-muted-foreground">
+            {brand.name} — staff dashboard
+            <span
+              title={calendarOn ? "Bookings sync to Google Calendar" : "Set GOOGLE_* env vars to sync bookings to Google Calendar"}
+              className={`ml-2 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] ${calendarOn ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"}`}
+            >
+              <span className={`h-1.5 w-1.5 rounded-full ${calendarOn ? "bg-primary" : "bg-muted-foreground/50"}`} />
+              Calendar sync {calendarOn ? "on" : "off"}
+            </span>
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <button onClick={() => void load()} className="rounded-lg border border-border px-3 py-1.5 text-sm text-muted-foreground transition active:scale-95 hover:bg-muted hover:text-foreground">
+            Refresh
+          </button>
+          <button onClick={logout} className="rounded-lg border border-border px-3 py-1.5 text-sm text-muted-foreground transition active:scale-95 hover:bg-muted hover:text-foreground">
+            Sign out
+          </button>
+        </div>
+      </header>
+
+      <div className="mx-auto max-w-3xl space-y-3 p-6">
+        {bookings.length === 0 && (
+          <p className="rounded-2xl border border-dashed border-border bg-card p-8 text-center text-sm text-muted-foreground">
+            No upcoming bookings yet. Make one from the chat widget on the clinic page.
+          </p>
+        )}
+
+        {bookings.map((b) => (
+          <div key={b.id} className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="font-medium text-card-foreground">
+                  {b.clientName}
+                  {b.petName ? <span className="text-muted-foreground"> · {b.petName}</span> : null}
+                </p>
+                <p className="text-sm text-muted-foreground">{b.service} — {b.when}</p>
+                <p className="text-xs text-muted-foreground" style={{ fontVariantNumeric: "tabular-nums" }}>
+                  {b.phone} · with {b.with}
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => void openReschedule(b)}
+                  disabled={busyId === b.id}
+                  className="rounded-lg border border-primary px-3 py-1.5 text-xs font-medium text-primary transition active:scale-95 hover:bg-primary/10 disabled:opacity-40"
+                >
+                  Reschedule
+                </button>
+                <button
+                  onClick={() => void cancel(b.id)}
+                  disabled={busyId === b.id}
+                  className="rounded-lg border border-danger/40 px-3 py-1.5 text-xs font-medium text-danger transition active:scale-95 hover:bg-danger/10 disabled:opacity-40"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+
+            {reschedule?.id === b.id && (
+              <div className="mt-3 rounded-xl bg-muted p-3">
+                <p className="mb-2 text-xs font-medium text-muted-foreground">Pick a new time for {b.service}:</p>
+                {reschedule.slots.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">Loading open times…</p>
+                ) : (
+                  <div className="flex flex-wrap gap-1.5">
+                    {reschedule.slots.map((s) => (
+                      <button
+                        key={s.iso}
+                        onClick={() => void doReschedule(b.id, s.iso)}
+                        className="rounded-lg border border-border bg-card px-2.5 py-1.5 text-xs text-card-foreground transition active:scale-95 hover:border-primary"
+                      >
+                        {s.label}
+                      </button>
+                    ))}
+                    <button onClick={() => setReschedule(null)} className="px-2 py-1.5 text-xs text-muted-foreground hover:text-foreground">
+                      cancel
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </main>
+  );
+}

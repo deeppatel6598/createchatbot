@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { rateLimit } from "@/lib/rate-limit";
-import { loadContext } from "@/lib/context";
+import { loadContext, slugFromRequest } from "@/lib/context";
 import { contactNotificationTemplate, sendEmail } from "@/lib/email";
 
 export const runtime = "nodejs";
@@ -35,7 +35,7 @@ export async function POST(req: NextRequest) {
 
   // Notify the clinic inbox (best-effort; falls back to the console outbox).
   try {
-    const { business } = await loadContext();
+    const { business } = await loadContext(slugFromRequest(req));
     const to = process.env.CLINIC_EMAIL || "team@example.com";
     await sendEmail({ to, ...contactNotificationTemplate(business, parsed.data) });
   } catch (err) {
