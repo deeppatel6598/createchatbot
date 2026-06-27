@@ -20,13 +20,13 @@ export function stopElevenLabs(): void {
 /** Throws if TTS is unavailable (e.g. 501 no key) so the caller can fall back. */
 export async function speakElevenLabs(
   text: string,
-  opts?: { onStart?: () => void; onEnd?: () => void },
+  opts?: { voiceId?: string; onStart?: () => void; onEnd?: () => void },
 ): Promise<void> {
   stopElevenLabs();
   const res = await fetch("/api/tts", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ text }),
+    body: JSON.stringify({ text, ...(opts?.voiceId ? { voiceId: opts.voiceId } : {}) }),
   });
   if (!res.ok) throw new Error(`tts unavailable: ${res.status}`);
 

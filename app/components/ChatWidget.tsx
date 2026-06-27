@@ -99,6 +99,7 @@ export default function ChatWidget({ slug }: { slug?: string }) {
         persona: biz.persona,
         lang: detectLanguage(text),
         provider: biz.voiceProvider,
+        voiceId: (biz.persona as { elevenLabsVoiceId?: string }).elevenLabsVoiceId,
         onStart: () => setSpeaking(true),
         onEnd: () => setSpeaking(false),
       });
